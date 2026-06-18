@@ -215,6 +215,35 @@ calls — the core integration design.
 isolation. See `buyer-team-mcp.example.json` for the client entry — supports
 local (stdio) and remote (Streamable HTTP) configurations.
 
+## Observability: OpenTelemetry
+
+Silent no-op when the OTEL SDK is not installed or `OTEL_EXPORTER_OTLP_ENDPOINT`
+is not set — CI never depends on it. When configured, exports OTLP traces via a
+`BatchSpanProcessor`.
+
+**Env vars:**
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint | (disabled) |
+| `OTEL_SERVICE_NAME` | Service name in traces | `atlas-counsel` |
+
+**What's traced:**
+
+- Every HTTP request (FastAPI auto-instrumentation)
+- `counsel.ask` / `counsel.resume` / `counsel.astream` — manual spans with
+  `tenant_id`, `question_len`, `thread_id`, and action attributes
+- `tenant.create` — graph compilation time per tenant
+- MCP tool calls (via the HTTP transport traces)
+
+**Setup:**
+
+```bash
+uv sync --extra otel
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+  uv run uvicorn atlas_counsel.service.api:app
+```
+
 ## Architecture
 
 ![ATLAS Counsel Architecture](images/atlas-counsel-architecture.svg)
@@ -250,6 +279,7 @@ use). See `buyer-team-mcp.example.json` for local and remote MCP client configs.
 ```text
 src/atlas_counsel/
   _tokenize.py         # shared tokenizer (used by reranker, judge, answerer)
+  telemetry.py          # OpenTelemetry setup (OTLP exporter, silent no-op when off)
   corpus/              # synthetic corpus generator + golden set
   chunking.py          # span -> chunk, preserving citation ids
   embeddings.py        # EmbeddingProvider protocol + HashingEmbedder

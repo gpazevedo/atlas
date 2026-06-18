@@ -1,4 +1,4 @@
-# ATLAS Counsel runtime — FastAPI service + MCP server in one image.
+# ATLAS Counsel runtime — FastAPI + MCP server in one image.
 FROM python:3.13-slim
 WORKDIR /app
 
@@ -7,14 +7,14 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Install deps first (layer cache when deps don't change).
 COPY uv.lock pyproject.toml README.md ./
-RUN uv sync --extra service --frozen --no-dev
+RUN uv sync --extra service --extra qdrant --frozen --no-dev
 
-# Copy source and a default checkpoint db location.
+# Copy source.
 COPY src ./src
 RUN mkdir -p /data
-ENV COUNSEL_CHECKPOINT_DB=/data/checkpoints.db
+ENV CHECKPOINT_DIR=/data
 
 EXPOSE 8000
 
-# Default: HTTP API. Override CMD to run the MCP stdio server instead.
+# HTTP + MCP on the same port (MCP mounted at /mcp).
 CMD ["uv", "run", "uvicorn", "atlas_counsel.service.api:app", "--host", "0.0.0.0", "--port", "8000"]

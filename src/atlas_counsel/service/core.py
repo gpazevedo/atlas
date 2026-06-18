@@ -11,9 +11,10 @@ pause can't block the connection. So a paused run is surfaced as a *result*
 resumes it. The graph's checkpointer is what carries state across those two
 otherwise-independent calls.
 
-State that must persist across calls lives in the checkpointer, keyed by
-thread_id; the service itself stays stateless apart from holding the compiled
-graph.
+Multi-tenancy: each tenant gets its own SqliteSaver at
+`{CHECKPOINT_DIR}/{tenant_id}/checkpoints.db`. Threads are scoped per-tenant
+automatically since each tenant has its own database. The retriever is shared
+(same procurement corpus, read-only).
 """
 
 from __future__ import annotations
@@ -25,13 +26,13 @@ from enum import Enum
 from pydantic import BaseModel, Field
 from langgraph.types import Command
 
-from ..agent import build_counsel_graph
 from ..agent.llm import LLMProvider
 from ..chunking import chunk_corpus
 from ..corpus import build_corpus
 from ..decompose import QueryDecomposer
 from ..embeddings import HashingEmbedder
 from ..retrieval import InMemoryHybridRetriever, RetrievedChunk, Retriever
+from .tenants import DEFAULT_TENANT, TenantRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +44,6 @@ class AskStatus(str, Enum):
     REFUSED = "refused"
     NEEDS_INPUT = "needs_input"   # paused at human-gate; resume required
     ERROR = "error"               # unrecoverable failure
-
-
-class Citation(BaseModel):
-    span_id: str
 
 
 class AskResult(BaseModel):
@@ -97,7 +94,7 @@ class FallbackRetriever:
 
 
 class CounselService:
-    """Holds one compiled graph and runs ask/resume against it."""
+    """Holds a TenantRegistry and runs ask/resume against it."""
 
     def __init__(
         self,
@@ -105,50 +102,54 @@ class CounselService:
         retriever: Retriever | None = None,
         llm: LLMProvider | None = None,
         decomposer: QueryDecomposer | None = None,
-        checkpointer=None,
+        checkpointer=None,  # deprecated; retained for test compat
         checkpoint_db: str | None = None,
         recursion_limit: int = DEFAULT_RECURSION_LIMIT,
     ) -> None:
         if retriever is None:
-            retriever = InMemoryHybridRetriever(HashingEmbedder())
-            retriever.index(chunk_corpus(build_corpus()))
+            retriever = _default_retriever()
         else:
-            # Wrap with in-memory fallback so transient Qdrant failures don't
-            # block requests. The fallback is pre-indexed with the same corpus.
-            fallback = InMemoryHybridRetriever(HashingEmbedder())
-            fallback.index(chunk_corpus(build_corpus()))
+            fallback = _default_retriever()
             retriever = FallbackRetriever(primary=retriever, fallback=fallback)
-        if checkpointer is None:
-            import os
-            import sqlite3
-            from langgraph.checkpoint.sqlite import SqliteSaver
-            db_path = checkpoint_db or os.environ.get("COUNSEL_CHECKPOINT_DB", "checkpoints.db")
-            conn = sqlite3.connect(db_path, check_same_thread=False)
-            checkpointer = SqliteSaver(conn)
-        self._checkpointer = checkpointer
-        self._recursion_limit = recursion_limit
-        self._graph = build_counsel_graph(
-            retriever, llm=llm, decomposer=decomposer, checkpointer=checkpointer
+        self._registry = TenantRegistry(
+            retriever=retriever, llm=llm, decomposer=decomposer,
         )
+        self._recursion_limit = recursion_limit
         self._ready = True
 
     # -- public API used by both transports ---------------------------------
 
-    def ask(self, question: str, thread_id: str | None = None) -> AskResult:
+    def ask(self, question: str, thread_id: str | None = None,
+            tenant_id: str = DEFAULT_TENANT) -> AskResult:
+        tenant = self._registry.get(tenant_id)
         cfg = self._make_config(thread_id)
-        out = self._graph.invoke({"question": question}, cfg)
+        out = tenant.compiled_graph.invoke({"question": question}, cfg)
         return self._interpret(out, cfg["configurable"]["thread_id"])
 
-    def resume(self, thread_id: str, action: str, guidance: str | None = None) -> AskResult:
+    def resume(self, thread_id: str, action: str,
+               guidance: str | None = None,
+               tenant_id: str = DEFAULT_TENANT) -> AskResult:
         """Resume a paused run. action ∈ {"steer","decline"}."""
+        tenant = self._registry.get(tenant_id)
         cfg = self._make_config(thread_id)
+        # Verify the thread exists in this tenant's DB. A stale or cross-tenant
+        # resume starts fresh and crashes on Command(resume=...) with no state.
+        snapshot = tenant.compiled_graph.get_state(cfg)
+        if snapshot is None or snapshot.values == {}:
+            return AskResult(
+                status=AskStatus.ERROR,
+                thread_id=thread_id,
+                answer="thread not found — it may belong to a different tenant "
+                       "or have expired",
+            )
         payload = {"action": action}
         if guidance is not None:
             payload["guidance"] = guidance
-        out = self._graph.invoke(Command(resume=payload), cfg)
+        out = tenant.compiled_graph.invoke(Command(resume=payload), cfg)
         return self._interpret(out, cfg["configurable"]["thread_id"])
 
-    async def astream(self, question: str, thread_id: str | None = None):
+    async def astream(self, question: str, thread_id: str | None = None,
+                      tenant_id: str = DEFAULT_TENANT):
         """Yield a JSON-able frame as each node completes, then a terminal
         frame. Used by the WebSocket for streaming progress.
 
@@ -157,36 +158,33 @@ class CounselService:
           {"event": "result", ...AskResult fields}            done
           {"event": "needs_input", ...}                       paused at gate
         """
+        tenant = self._registry.get(tenant_id)
         cfg = self._make_config(thread_id)
-        # stream_mode="updates" yields {node_name: partial_state} per step.
-        for step in self._graph.stream({"question": question}, cfg, stream_mode="updates"):
+        for step in tenant.compiled_graph.stream(
+            {"question": question}, cfg, stream_mode="updates"
+        ):
             for node_name in step:
                 if node_name != "__interrupt__":
                     yield {"event": "node", "node": node_name}
-        # Build the terminal frame from the final checkpointed state.
         tid = cfg["configurable"]["thread_id"]
-        result = self._result_from_snapshot(cfg, tid)
+        result = self._result_from_snapshot(tenant.compiled_graph, cfg, tid)
         event = "needs_input" if result.status == AskStatus.NEEDS_INPUT else "result"
         yield {"event": event, **result.model_dump()}
 
     def deep_health(self) -> dict:
         """Health check that verifies real dependencies, not just liveness."""
         result: dict = {"status": "ok", "ready": self._ready}
-        # Probe the graph with a minimal invoke.
-        try:
-            cfg = self._make_config("health-check")
-            self._graph.invoke({"question": "health check"}, cfg)
-            result["graph"] = "ok"
-        except Exception as exc:
+        registry_health = self._registry.deep_health()
+        # No-tenants-yet is healthy — tenants are created lazily on first use.
+        graph = registry_health.get("graph", "unknown")
+        ckp = registry_health.get("checkpointer", "unknown")
+        if graph != "no-tenants" and graph != "ok":
             result["status"] = "degraded"
-            result["graph"] = str(exc)
-        # Probe the checkpointer.
-        try:
-            snapshot = self._graph.get_state(self._make_config("health-check"))
-            result["checkpointer"] = "ok" if snapshot is not None else "no-state"
-        except Exception as exc:
+        elif ckp != "no-tenants" and ckp != "ok":
             result["status"] = "degraded"
-            result["checkpointer"] = str(exc)
+        result["graph"] = graph
+        result["checkpointer"] = ckp
+        result["tenants"] = registry_health.get("tenants", 0)
         return result
 
     # -- helpers ------------------------------------------------------------
@@ -197,10 +195,11 @@ class CounselService:
             "recursion_limit": self._recursion_limit,
         }
 
-    def _result_from_snapshot(self, cfg: dict, thread_id: str) -> AskResult:
+    @staticmethod
+    def _result_from_snapshot(graph, cfg: dict, thread_id: str) -> AskResult:
         """Interpret the graph's current checkpoint into an AskResult, whether
         it paused at the gate or ran to completion."""
-        snapshot = self._graph.get_state(cfg)
+        snapshot = graph.get_state(cfg)
         for task in snapshot.tasks:
             interrupts = getattr(task, "interrupts", None)
             if interrupts:
@@ -221,9 +220,8 @@ class CounselService:
             escalated=ans.escalated,
         )
 
-    # -- helpers ------------------------------------------------------------
-
-    def _interpret(self, out: dict, thread_id: str) -> AskResult:
+    @staticmethod
+    def _interpret(out: dict, thread_id: str) -> AskResult:
         if "__interrupt__" in out:
             intr = out["__interrupt__"][0].value
             return AskResult(
@@ -241,3 +239,9 @@ class CounselService:
             attempts=ans.attempts,
             escalated=ans.escalated,
         )
+
+
+def _default_retriever() -> Retriever:
+    r = InMemoryHybridRetriever(HashingEmbedder())
+    r.index(chunk_corpus(build_corpus()))
+    return r

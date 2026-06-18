@@ -1,0 +1,4 @@
+region             = "us-east-1"
+qdrant_url         = "https://your-cluster.qdrant.cloud:6333"
+container_image_tag = "latest"
+desired_count       = 1

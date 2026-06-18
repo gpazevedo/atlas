@@ -33,8 +33,8 @@ def test_health(client):
     r = client.get("/health").json()
     assert r["status"] == "ok"
     assert r["ready"] is True
-    assert r["graph"] == "ok"
-    assert r["checkpointer"] == "ok"
+    assert r["graph"] in ("ok", "no-tenants")
+    assert r["checkpointer"] in ("ok", "no-tenants")
 
 
 def test_ask_grounded_returns_citation(client):
@@ -117,8 +117,8 @@ def test_ws_unanswerable_streams_needs_input(client):
 # --- MCP tools --------------------------------------------------------------
 
 def test_mcp_registers_tools():
-    from atlas_counsel.service.mcp_server import _build_server
-    mcp = _build_server()
+    from atlas_counsel.service.mcp_server import build_mcp_server
+    mcp = build_mcp_server()
     names = {t.name for t in asyncio.run(mcp.list_tools())}
     assert names == {"counsel_ask", "counsel_resume", "counsel_brief", "counsel_health"}
 
@@ -177,7 +177,7 @@ def test_exception_handler_returns_error_result():
     app = create_app(service=svc)
     client = TestClient(app, raise_server_exceptions=False)
 
-    def _boom(question, thread_id=None):
+    def _boom(question, thread_id=None, tenant_id="default"):
         raise RuntimeError("simulated crash")
     svc.ask = _boom
 
@@ -262,7 +262,9 @@ def test_fallback_retriever_try_restore_detects_recovery():
 # --- Env var wiring -----------------------------------------------------------
 
 def test_counsel_checkpoint_db_env_var(monkeypatch, tmp_path):
-    db_path = tmp_path / "custom.db"
-    monkeypatch.setenv("COUNSEL_CHECKPOINT_DB", str(db_path))
-    CounselService()
-    assert db_path.exists()
+    tenant_dir = tmp_path / "acme"
+    monkeypatch.setenv("CHECKPOINT_DIR", str(tmp_path))
+    # Access the tenant to trigger checkpoint creation.
+    svc = CounselService()
+    svc.ask("test", tenant_id="acme")
+    assert (tenant_dir / "checkpoints.db").exists()

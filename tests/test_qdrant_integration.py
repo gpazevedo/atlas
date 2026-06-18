@@ -4,8 +4,8 @@ Skipped automatically unless a Qdrant server is reachable (env QDRANT_URL or
 localhost:6333) and qdrant-client is installed. Run locally with:
 
     docker run -p 6333:6333 qdrant/qdrant
-    pip install qdrant-client
-    pytest tests/test_qdrant_integration.py -v
+    uv sync --extra qdrant
+    uv run pytest tests/test_qdrant_integration.py -v
 """
 
 from __future__ import annotations
@@ -26,6 +26,8 @@ def _qdrant_available() -> bool:
     except Exception:
         return False
 
+
+pytest.importorskip("qdrant_client", reason="qdrant-client not installed")
 
 pytestmark = pytest.mark.skipif(
     not _qdrant_available(), reason="no Qdrant server reachable"

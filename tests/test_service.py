@@ -12,6 +12,9 @@ from __future__ import annotations
 import asyncio
 
 import pytest
+
+pytest.importorskip("fastapi", reason="fastapi not installed (try: uv sync --extra service)")
+
 from fastapi.testclient import TestClient
 
 from atlas_counsel.service import AskStatus, CounselService, create_app

@@ -5,16 +5,44 @@ complementary knowledge service to the Buyer Team platform: a multi-agent
 (LangGraph) RAG pipeline with hybrid retrieval, reranking, citation grounding,
 and a measured eval harness.
 
-This first slice ships the **corpus generator + golden eval set** — the
-foundation everything else is measured against.
+This first slice ships the **corpus generator + golden eval set** plus a
+**hybrid retrieval layer** (dense + sparse, RRF fusion) over it.
 
 ## Quickstart
 
 ```bash
 pip install -e ".[dev]"
-atlas-corpus            # writes data/corpus/*.md, manifest.json, data/eval/golden.jsonl
-pytest                  # determinism, integrity, and hard-case guards
+atlas-corpus                          # generate the corpus
+pytest                                # 14 tests, no external services
+
+# hybrid retrieval, offline (in-memory, no Qdrant):
+python -m atlas_counsel.ingest --dry-run
+
+# hybrid retrieval against real Qdrant:
+docker compose up -d
+uv sync --extra qdrant
+python -m atlas_counsel.ingest --url http://localhost:6333
+pytest tests/test_qdrant_integration.py -v
 ```
+
+## Retrieval design
+
+- **Hybrid, native.** One collection per chunk holds a dense vector and a
+  sparse (lexical) vector. Queries fuse both channels with Reciprocal Rank
+  Fusion (RRF). Sparse rescues exact tokens — `$25,000`, `99.5%` — that a
+  semantic dense model smears together. `tests/test_retrieval.py` proves a
+  real fusion win on a query where the channels disagree.
+- **Vector-space safety by construction.** Each embedding provider declares a
+  `space_id`; the collection name is derived from it (`counsel_bge-m3`,
+  `counsel_titan-v2`). A local-dev index and a Bedrock-prod index are
+  physically separate collections — you cannot query one space against the
+  other by accident.
+- **Provider abstraction.** `EmbeddingProvider` is a Protocol yielding dense +
+  sparse per text. `HashingEmbedder` is a deterministic offline stand-in for
+  CI; real bge-m3 (dev) and Titan (prod) providers implement the same
+  interface. Dev/prod is a config swap, not a code branch.
+- **Citations survive retrieval.** Chunks map 1:1 to spans and carry the
+  `span_id` through Qdrant payloads, so a result always cites `POL-001#S1`.
 
 ## What the corpus contains
 
@@ -50,4 +78,17 @@ src/atlas_counsel/corpus/
   writer.py      # serialize to markdown + JSONL
 tests/           # determinism, integrity, hard-case guards
 data/            # generated (gitignored)
+```
+## Layout
+
+```
+src/atlas_counsel/
+  corpus/          # synthetic corpus generator + golden set (PR1)
+  chunking.py      # span -> chunk, preserving citation ids
+  embeddings.py    # EmbeddingProvider protocol + offline HashingEmbedder
+  retrieval.py     # Retriever protocol, RRF fusion, in-memory hybrid
+  qdrant_store.py  # production Qdrant hybrid retriever (named vectors + RRF)
+  ingest.py        # CLI: build -> chunk -> index
+tests/             # corpus + retrieval + (skipped) Qdrant integration
+docker-compose.yml # local Qdrant
 ```

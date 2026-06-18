@@ -179,6 +179,35 @@ The compiled graph is exposed as an MCP tool (`counsel.ask`, `counsel.brief`)
 so Buyer Team's Strands orchestrator calls it as one tool among its own. That
 PR adds the MCP server + FastAPI/WebSocket runtime around this graph.
 
+## Runtime: FastAPI + MCP
+
+The graph exposed over two transports, both thin wrappers over one
+`CounselService` — so HTTP and MCP behave identically (proven by
+`test_mcp_and_http_agree`).
+
+```bash
+uv sync --extra service
+uv run uvicorn atlas_counsel.service.api:app    # HTTP on :8000
+uv run python -m atlas_counsel.service.mcp_server      # MCP stdio server
+```
+
+**REST**
+- `POST /ask {question}` → `{status, thread_id, answer, citations[]}`
+- `POST /resume {thread_id, action, guidance?}` → same shape
+- `WS /ws/ask` → streams `{event:"node", node}` per step, then a terminal
+  `result` / `needs_input` frame (the JD's streaming requirement)
+
+**Interrupt across stateless calls.** The agent pauses at the human-gate via
+LangGraph `interrupt()`, but HTTP/MCP are request/response. So a paused run
+returns `status="needs_input"` plus a `thread_id`; a second `/resume` call
+continues it. The checkpointer carries state across those two independent
+calls — the core integration design.
+
+**MCP tools** (what Buyer Team calls): `counsel_ask`, `counsel_resume`,
+`counsel_brief`. See `buyer-team-mcp.example.json` for the client entry. The
+Strands orchestrator lists these alongside its own tools and invokes them over
+MCP — this is the integration boundary, with neither system absorbing the other.
+
 ## Layout
 
 ```
@@ -299,6 +328,35 @@ The compiled graph is exposed as an MCP tool (`counsel.ask`, `counsel.brief`)
 so Buyer Team's Strands orchestrator calls it as one tool among its own. That
 PR adds the MCP server + FastAPI/WebSocket runtime around this graph.
 
+## Runtime: FastAPI + MCP
+
+The graph exposed over two transports, both thin wrappers over one
+`CounselService` — so HTTP and MCP behave identically (proven by
+`test_mcp_and_http_agree`).
+
+```bash
+uv sync --extra service
+uv run uvicorn atlas_counsel.service.api:app    # HTTP on :8000
+uv run python -m atlas_counsel.service.mcp_server      # MCP stdio server
+```
+
+**REST**
+- `POST /ask {question}` → `{status, thread_id, answer, citations[]}`
+- `POST /resume {thread_id, action, guidance?}` → same shape
+- `WS /ws/ask` → streams `{event:"node", node}` per step, then a terminal
+  `result` / `needs_input` frame (the JD's streaming requirement)
+
+**Interrupt across stateless calls.** The agent pauses at the human-gate via
+LangGraph `interrupt()`, but HTTP/MCP are request/response. So a paused run
+returns `status="needs_input"` plus a `thread_id`; a second `/resume` call
+continues it. The checkpointer carries state across those two independent
+calls — the core integration design.
+
+**MCP tools** (what Buyer Team calls): `counsel_ask`, `counsel_resume`,
+`counsel_brief`. See `buyer-team-mcp.example.json` for the client entry. The
+Strands orchestrator lists these alongside its own tools and invokes them over
+MCP — this is the integration boundary, with neither system absorbing the other.
+
 ## Layout
 
 ```
@@ -315,6 +373,7 @@ src/atlas_counsel/
   pipeline.py      # composed decompose->retrieve->merge->rerank
   ablation.py      # CLI: measure each stage's effect
   agent/           # LangGraph StateGraph: state, schemas, nodes, graph, llm
+  service/         # CounselService + FastAPI api + MCP server (one logic, two transports)
 tests/             # corpus + retrieval + (skipped) Qdrant integration
 docker-compose.yml # local Qdrant
 ```

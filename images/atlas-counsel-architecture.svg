@@ -1,0 +1,240 @@
+<svg viewBox="0 0 1280 880" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0d1421"/>
+      <stop offset="1" stop-color="#111a2b"/>
+    </linearGradient>
+    <linearGradient id="queryFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#16243a"/>
+      <stop offset="1" stop-color="#13203250"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#5b87c4"/>
+    </marker>
+    <marker id="arrowDim" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#4a6178"/>
+    </marker>
+    <marker id="arrowEval" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#cf9b5b"/>
+    </marker>
+    <style>
+      .title { fill:#eef3fb; font-size:30px; font-weight:700; letter-spacing:0.5px; }
+      .subtitle { fill:#7d92ad; font-size:14px; letter-spacing:2px; }
+      .lane { fill:#9fb3cc; font-size:13px; font-weight:700; letter-spacing:2px; }
+      .node-t { fill:#eaf1fb; font-size:15px; font-weight:600; }
+      .node-s { fill:#8ba3c2; font-size:11.5px; }
+      .pill { fill:#9fb8d8; font-size:10.5px; font-weight:600; letter-spacing:1px; }
+      .tag { fill:#6f8aa8; font-size:10px; letter-spacing:1px; }
+      .legend { fill:#8ba3c2; font-size:12px; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="880" fill="url(#bg)"/>
+
+  <!-- header -->
+  <text x="56" y="58" class="title">ATLAS Counsel</text>
+  <text x="58" y="82" class="subtitle">CITATION-GROUNDED AGENTIC RAG · ARCHITECTURE OVERVIEW</text>
+  <text x="1224" y="58" text-anchor="end" class="subtitle">COMPLEMENTARY SERVICE TO BUYER TEAM</text>
+
+  <!-- ============ OFFLINE INGEST LANE ============ -->
+  <text x="56" y="132" class="lane">OFFLINE · INGEST</text>
+  <line x1="56" y1="142" x2="372" y2="142" stroke="#26344b" stroke-width="1"/>
+
+  <!-- corpus generator -->
+  <g>
+    <rect x="56" y="158" width="316" height="92" rx="10" fill="#16243a" stroke="#2c405d" stroke-width="1.2"/>
+    <text x="74" y="186" class="node-t">Synthetic Corpus Generator</text>
+    <text x="74" y="208" class="node-s">Deterministic · seeded · no LLM, no network</text>
+    <text x="74" y="226" class="node-s">8 docs · 24 citable spans · planted hard cases</text>
+    <text x="74" y="242" class="tag">POL-001#S1 — stable span ids = citation contract</text>
+  </g>
+
+  <!-- arrow down -->
+  <line x1="214" y1="250" x2="214" y2="284" stroke="#5b87c4" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- chunk + embed -->
+  <g>
+    <rect x="56" y="290" width="316" height="86" rx="10" fill="#16243a" stroke="#2c405d" stroke-width="1.2"/>
+    <text x="74" y="318" class="node-t">Chunk → Dual Embed</text>
+    <text x="74" y="340" class="node-s">1 chunk ≈ 1 span (carries span_id through)</text>
+    <text x="74" y="358" class="node-s">dense + sparse vectors per chunk</text>
+  </g>
+
+  <line x1="214" y1="376" x2="214" y2="410" stroke="#5b87c4" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- qdrant -->
+  <g>
+    <rect x="56" y="416" width="316" height="96" rx="10" fill="#16243a" stroke="#2c405d" stroke-width="1.2"/>
+    <text x="74" y="444" class="node-t">Qdrant — Hybrid Index</text>
+    <text x="74" y="466" class="node-s">named vectors: dense + sparse, one collection</text>
+    <text x="74" y="484" class="node-s">collection-per-embedding-space:</text>
+    <text x="74" y="500" class="tag">counsel_bge-m3 ⟂ counsel_titan-v2 (never mixed)</text>
+  </g>
+
+  <!-- ============ ONLINE QUERY LANE ============ -->
+  <text x="436" y="132" class="lane">ONLINE · QUERY PIPELINE</text>
+  <line x1="436" y1="142" x2="952" y2="142" stroke="#26344b" stroke-width="1"/>
+
+  <rect x="436" y="158" width="516" height="354" rx="14" fill="url(#queryFill)" stroke="#2c405d" stroke-width="1.3"/>
+
+  <!-- user query in -->
+  <g>
+    <rect x="460" y="180" width="220" height="56" rx="9" fill="#1b2c46" stroke="#34507a" stroke-width="1.2"/>
+    <text x="478" y="204" class="node-t">User Question</text>
+    <text x="478" y="222" class="node-s">"who approves a $60k purchase?"</text>
+  </g>
+
+  <!-- decompose -->
+  <g>
+    <rect x="460" y="256" width="220" height="62" rx="9" fill="#16243a" stroke="#2c405d" stroke-width="1.2"/>
+    <text x="478" y="280" class="node-t">Query Decomposition</text>
+    <text x="478" y="298" class="node-s">conditional · splits compare queries</text>
+    <text x="664" y="252" class="pill" text-anchor="end">OPTIONAL</text>
+  </g>
+
+  <!-- retrieve + merge -->
+  <g>
+    <rect x="460" y="338" width="220" height="62" rx="9" fill="#16243a" stroke="#2c405d" stroke-width="1.2"/>
+    <text x="478" y="362" class="node-t">Hybrid Retrieve + Merge</text>
+    <text x="478" y="380" class="node-s">dense + sparse · RRF fusion</text>
+  </g>
+
+  <!-- rerank -->
+  <g>
+    <rect x="460" y="420" width="220" height="62" rx="9" fill="#16243a" stroke="#2c405d" stroke-width="1.2"/>
+    <text x="478" y="444" class="node-t">Rerank</text>
+    <text x="448" y="502" class="tag">these stages run inside the graph's plan / retrieve nodes</text>
+    <text x="478" y="462" class="node-s">cross-encoder over short list</text>
+    <text x="664" y="416" class="pill" text-anchor="end">OPTIONAL</text>
+  </g>
+
+  <!-- vertical flow arrows in query box -->
+  <line x1="570" y1="236" x2="570" y2="250" stroke="#5b87c4" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="570" y1="318" x2="570" y2="332" stroke="#5b87c4" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <line x1="570" y1="400" x2="570" y2="414" stroke="#5b87c4" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- arrow from qdrant into retrieve -->
+  <path d="M372,464 C410,464 420,369 454,369" fill="none" stroke="#5b87c4" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- LangGraph synthesize column (right of pipeline inner) -->
+  <g>
+    <rect x="704" y="180" width="224" height="302" rx="11" fill="#15233a" stroke="#3a5d52" stroke-width="1.4"/>
+    <text x="816" y="206" text-anchor="middle" class="node-t" fill="#cde3b6">LangGraph Agent</text>
+    <text x="816" y="226" text-anchor="middle" class="pill" fill="#9cbd7a">BUILT · CHECKPOINTED · RESILIENT</text>
+
+    <rect x="724" y="244" width="184" height="42" rx="7" fill="#16243a" stroke="#2c405d"/>
+    <text x="816" y="270" text-anchor="middle" class="node-s" fill="#cfe0f2">plan · retrieve</text>
+
+    <rect x="724" y="296" width="184" height="42" rx="7" fill="#16243a" stroke="#2c405d"/>
+    <text x="816" y="322" text-anchor="middle" class="node-s" fill="#cfe0f2">validate grounding</text>
+
+    <rect x="724" y="348" width="184" height="42" rx="7" fill="#16243a" stroke="#2c405d"/>
+    <text x="816" y="368" text-anchor="middle" class="node-s" fill="#cfe0f2">synthesize</text>
+    <text x="816" y="383" text-anchor="middle" class="tag">Pydantic citations enforced</text>
+
+    <rect x="724" y="400" width="184" height="42" rx="7" fill="#16243a" stroke="#2c405d"/>
+    <text x="816" y="420" text-anchor="middle" class="node-s" fill="#cfe0f2">verify ⇄ human-gate</text>
+    <text x="816" y="435" text-anchor="middle" class="tag">checkpointed · interrupt</text>
+
+    <line x1="816" y1="286" x2="816" y2="294" stroke="#7fa35f" stroke-width="1.4" marker-end="url(#arrowDim)"/>
+    <line x1="816" y1="338" x2="816" y2="346" stroke="#7fa35f" stroke-width="1.4" marker-end="url(#arrowDim)"/>
+    <line x1="816" y1="390" x2="816" y2="398" stroke="#7fa35f" stroke-width="1.4" marker-end="url(#arrowDim)"/>
+  </g>
+
+  <!-- arrow rerank -> langgraph -->
+  <path d="M680,451 C694,451 694,360 720,360" fill="none" stroke="#5b87c4" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- grounded answer out -->
+  <g>
+    <rect x="436" y="536" width="516" height="64" rx="11" fill="#15263d" stroke="#34507a" stroke-width="1.3"/>
+    <text x="456" y="563" class="node-t">Grounded Answer + Citations</text>
+    <text x="456" y="584" class="node-s">FastAPI /ask · /resume · WS /ws/ask streaming · MCP tools for Buyer Team</text>
+  </g>
+  <line x1="816" y1="482" x2="816" y2="530" stroke="#5b87c4" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- ============ EVAL HARNESS LANE (right) ============ -->
+  <text x="992" y="132" class="lane" fill="#d8b889">MEASUREMENT</text>
+  <line x1="992" y1="142" x2="1224" y2="142" stroke="#473b27" stroke-width="1"/>
+
+  <g>
+    <rect x="992" y="158" width="232" height="442" rx="14" fill="#1c1d18" stroke="#4a3c24" stroke-width="1.3"/>
+    <text x="1010" y="186" class="node-t" fill="#f0d9b0">Eval Harness</text>
+    <text x="1010" y="205" class="tag" fill="#b8975b">built before the agent</text>
+
+    <rect x="1010" y="222" width="196" height="74" rx="8" fill="#21221b" stroke="#4a3c24"/>
+    <text x="1026" y="246" class="node-s" fill="#ecd9b6">Retrieval metrics · exact</text>
+    <text x="1026" y="264" class="tag">hit@k · recall · ctx-precision</text>
+    <text x="1026" y="280" class="tag">MRR · vs golden span ids</text>
+
+    <rect x="1010" y="306" width="196" height="64" rx="8" fill="#21221b" stroke="#4a3c24"/>
+    <text x="1026" y="330" class="node-s" fill="#ecd9b6">LLM-judge metrics</text>
+    <text x="1026" y="348" class="tag">faithfulness · relevancy</text>
+    <text x="1026" y="363" class="tag">refuse-if-ungrounded</text>
+
+    <rect x="1010" y="380" width="196" height="58" rx="8" fill="#21221b" stroke="#4a3c24"/>
+    <text x="1026" y="404" class="node-s" fill="#ecd9b6">Per-tag slices · A/B</text>
+    <text x="1026" y="422" class="tag">hard-case breakdown · ablation</text>
+
+    <rect x="1010" y="448" width="196" height="52" rx="8" fill="#21221b" stroke="#4a3c24"/>
+    <text x="1026" y="470" class="node-s" fill="#ecd9b6">Regression gate (CI)</text>
+    <text x="1026" y="487" class="tag">fails loudly on quality drop</text>
+
+    <rect x="1010" y="510" width="196" height="74" rx="8" fill="#21221b" stroke="#4a3c24"/>
+    <text x="1026" y="534" class="node-s" fill="#ecd9b6">Langfuse (optional)</text>
+    <text x="1026" y="552" class="tag">traces · scores · latency</text>
+    <text x="1026" y="568" class="tag">no-op if unconfigured</text>
+  </g>
+
+  <!-- dashed eval taps into query pipeline -->
+  <path d="M952,360 C972,360 980,300 1006,290" fill="none" stroke="#cf9b5b" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#arrowEval)"/>
+  <path d="M952,568 C975,568 982,480 1006,468" fill="none" stroke="#cf9b5b" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#arrowEval)"/>
+  <text x="958" y="345" class="tag" fill="#b8975b">observes</text>
+
+  <!-- ============ PROVIDER ABSTRACTION SEAM (bottom) ============ -->
+  <text x="56" y="650" class="lane">PROVIDER ABSTRACTION · ONE INTERFACE, SWAPPABLE BACKENDS</text>
+  <line x1="56" y1="660" x2="1224" y2="660" stroke="#26344b" stroke-width="1"/>
+
+  <!-- protocols row -->
+  <g>
+    <rect x="56" y="676" width="262" height="78" rx="10" fill="#16243a" stroke="#34507a" stroke-width="1.2"/>
+    <text x="74" y="702" class="node-t">EmbeddingProvider</text>
+    <text x="74" y="722" class="node-s">dense + sparse · space_id</text>
+    <text x="74" y="740" class="tag">dev: bge-m3   ·   prod: Titan</text>
+  </g>
+  <g>
+    <rect x="334" y="676" width="262" height="78" rx="10" fill="#16243a" stroke="#34507a" stroke-width="1.2"/>
+    <text x="352" y="702" class="node-t">Reranker</text>
+    <text x="352" y="722" class="node-s">token-proxy (CI) · cross-encoder</text>
+    <text x="352" y="740" class="tag">prod: bge-reranker-v2-m3</text>
+  </g>
+  <g>
+    <rect x="612" y="676" width="262" height="78" rx="10" fill="#16243a" stroke="#34507a" stroke-width="1.2"/>
+    <text x="630" y="702" class="node-t">LLMJudge</text>
+    <text x="630" y="722" class="node-s">heuristic (CI) · real LLM</text>
+    <text x="630" y="740" class="tag">deterministic offline scoring</text>
+  </g>
+  <g>
+    <rect x="890" y="676" width="334" height="78" rx="10" fill="#16243a" stroke="#34507a" stroke-width="1.2"/>
+    <text x="908" y="702" class="node-t">LLM Backend</text>
+    <text x="908" y="722" class="node-s">dev: local (Ollama) · prod: AWS Bedrock</text>
+    <text x="908" y="740" class="tag">config swap, not a code branch</text>
+  </g>
+
+  <!-- ============ FOOTER: build status + legend ============ -->
+  <line x1="56" y1="788" x2="1224" y2="788" stroke="#26344b" stroke-width="1"/>
+
+  <!-- legend -->
+  <rect x="56" y="808" width="18" height="14" rx="3" fill="#16243a" stroke="#34507a"/>
+  <text x="82" y="820" class="legend">corpus + retrieval + eval</text>
+
+  <rect x="246" y="808" width="18" height="14" rx="3" fill="#15233a" stroke="#3a5d52"/>
+  <text x="272" y="820" class="legend">agent + runtime</text>
+
+  <rect x="468" y="808" width="18" height="14" rx="3" fill="#1c1d18" stroke="#4a3c24"/>
+  <text x="494" y="820" class="legend">measurement / observability</text>
+
+  <line x1="690" y1="815" x2="724" y2="815" stroke="#cf9b5b" stroke-width="1.4" stroke-dasharray="5 4"/>
+  <text x="732" y="820" class="legend">eval observes the live pipeline</text>
+
+  <text x="1224" y="852" text-anchor="end" class="legend" fill="#6f8aa8">63 tests passing · offline-reproducible · public-safe corpus</text>
+</svg>

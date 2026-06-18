@@ -8,6 +8,7 @@ unambiguous — and that decomposition never harms simple queries.
 
 from __future__ import annotations
 
+from atlas_counsel._tokenize import tokenize
 from atlas_counsel.chunking import Chunk
 from atlas_counsel.corpus.models import DocCategory
 from atlas_counsel.decompose import HeuristicDecomposer
@@ -20,6 +21,7 @@ def _rc(span_id: str, text: str, score: float, title: str = "T") -> RetrievedChu
         chunk=Chunk(
             chunk_id=span_id, span_id=span_id, doc_id=span_id.split("#")[0],
             category=DocCategory.POLICY, title=title, text=text,
+            tokens=tokenize(text),
         ),
         score=score,
     )

@@ -14,10 +14,11 @@ Both return scores in [0, 1] so the report format is identical regardless.
 
 from __future__ import annotations
 
-import re
 from typing import Protocol
 
 from pydantic import BaseModel
+
+from .._tokenize import STOPWORDS, tokenize
 
 
 class JudgeResult(BaseModel):
@@ -31,15 +32,10 @@ class LLMJudge(Protocol):
     ) -> JudgeResult: ...
 
 
-_WORD = re.compile(r"[a-z0-9$%.]+")
 _REFUSAL_MARKERS = (
     "cannot", "can't", "not covered", "no information", "don't have",
     "not in", "unable to", "does not", "insufficient", "not found",
 )
-
-
-def _tokens(s: str) -> set[str]:
-    return set(_WORD.findall(s.lower()))
 
 
 def looks_like_refusal(answer: str) -> bool:
@@ -59,18 +55,16 @@ class HeuristicJudge:
     Refusals are handled by the runner, not here.
     """
 
-    _STOP = {
-        "the", "a", "an", "of", "to", "for", "and", "or", "is", "are", "what",
-        "which", "who", "does", "do", "above", "value", "need", "our", "with",
-        "at", "in", "on", "be", "by", "this", "that",
-    }
+    # Matches the old stopword set exactly — omits "i", "can", "from", "into"
+    # from the shared STOPWORDS to preserve existing score behaviour.
+    _STOP = STOPWORDS - {"i", "can", "from", "into"}
 
     def judge(
         self, question: str, answer: str, context: list[str]
     ) -> JudgeResult:
-        ans_tokens = _tokens(answer) - self._STOP
-        ctx_tokens = set().union(*[_tokens(c) for c in context]) if context else set()
-        q_tokens = _tokens(question) - self._STOP
+        ans_tokens = set(tokenize(answer)) - self._STOP
+        ctx_tokens = set().union(*[set(tokenize(c)) for c in context]) if context else set()
+        q_tokens = set(tokenize(question)) - self._STOP
 
         faithfulness = (
             len(ans_tokens & ctx_tokens) / len(ans_tokens) if ans_tokens else 0.0

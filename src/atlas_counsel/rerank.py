@@ -23,25 +23,10 @@ to take its value on faith.
 
 from __future__ import annotations
 
-import re
 from typing import Protocol
 
+from ._tokenize import STOPWORDS, content_tokens, tokenize
 from .retrieval import RetrievedChunk
-
-_WORD = re.compile(r"[a-z0-9$%.,]+")
-_STOP = {
-    "the", "a", "an", "of", "to", "for", "and", "or", "is", "are", "what",
-    "which", "who", "does", "do", "above", "value", "need", "our", "with",
-    "at", "in", "on", "be", "by", "this", "that", "i", "can", "from", "into",
-}
-
-
-def _tokens(s: str) -> list[str]:
-    return _WORD.findall(s.lower())
-
-
-def _content(s: str) -> set[str]:
-    return {t for t in _tokens(s) if t not in _STOP and len(t) > 2}
 
 
 class Reranker(Protocol):
@@ -76,31 +61,36 @@ class TokenInteractionReranker:
     def __init__(self, phrase_bonus: float = 1.0) -> None:
         self._phrase_bonus = phrase_bonus
 
-    def _doc_freq(self, candidates: list[RetrievedChunk]) -> dict[str, int]:
+    @staticmethod
+    def _doc_content(c: RetrievedChunk) -> set[str]:
+        """Content tokens from chunk text (precomputed) + title (cheap, short)."""
+        text_tokens = {t for t in c.chunk.tokens if t not in STOPWORDS and len(t) >= 3}
+        title_tokens = content_tokens(c.chunk.title, min_len=3)
+        return text_tokens | title_tokens
+
+    @staticmethod
+    def _doc_bigrams(c: RetrievedChunk) -> set[tuple[str, str]]:
+        return set(zip(c.chunk.tokens, c.chunk.tokens[1:]))
+
+    def _doc_freq(self, docs: list[set[str]]) -> dict[str, int]:
         df: dict[str, int] = {}
-        for c in candidates:
-            for tok in _content(c.chunk.text) | _content(c.chunk.title):
+        for terms in docs:
+            for tok in terms:
                 df[tok] = df.get(tok, 0) + 1
         return df
 
     def _pair_score(
-        self, q_terms: set[str], q_bigrams: set[str],
-        chunk_text: str, chunk_title: str, df: dict[str, int], n: int,
+        self, q_terms: set[str], q_bigrams: set[tuple[str, str]],
+        doc_terms: set[str], doc_bigrams: set[tuple[str, str]],
+        df: dict[str, int], n: int,
     ) -> float:
-        doc_terms = _content(chunk_text) | _content(chunk_title)
         if not q_terms:
             return 0.0
         matched = q_terms & doc_terms
         coverage = len(matched) / len(q_terms)
-        # rarer matched terms (low doc freq) weigh more
         rarity = sum(1.0 / (1 + df.get(t, 0)) for t in matched)
         rarity_norm = rarity / len(q_terms)
 
-        doc_bigrams = set(zip(_tokens(chunk_text), _tokens(chunk_text)[1:]))
-        # Phrase signal scales with the FRACTION of query bigrams matched, so a
-        # passage that reproduces the query's phrasing is rewarded in
-        # proportion to how much structure it shares — strong adjacency can
-        # then overcome a passage that merely stuffs the individual keywords.
         if q_bigrams:
             phrase = self._phrase_bonus * (len(q_bigrams & doc_bigrams) / len(q_bigrams))
         else:
@@ -112,15 +102,22 @@ class TokenInteractionReranker:
     ) -> list[RetrievedChunk]:
         if not candidates:
             return []
-        q_terms = _content(query)
-        q_tokens = _tokens(query)
+        q_terms = content_tokens(query, min_len=3)
+        q_tokens = tokenize(query)
         q_bigrams = set(zip(q_tokens, q_tokens[1:]))
-        df = self._doc_freq(candidates)
+
+        # Precompute doc-side data once per candidate — avoids re-running
+        # regex/tokenization for every (query, chunk) pair.
+        doc_terms_list = [self._doc_content(c) for c in candidates]
+        doc_bigrams_list = [self._doc_bigrams(c) for c in candidates]
+        df = self._doc_freq(doc_terms_list)
 
         rescored: list[RetrievedChunk] = []
-        for c in candidates:
+        for i, c in enumerate(candidates):
             s = self._pair_score(
-                q_terms, q_bigrams, c.chunk.text, c.chunk.title, df, len(candidates)
+                q_terms, q_bigrams,
+                doc_terms_list[i], doc_bigrams_list[i],
+                df, len(candidates),
             )
             rescored.append(c.model_copy(update={"score": s}))
 

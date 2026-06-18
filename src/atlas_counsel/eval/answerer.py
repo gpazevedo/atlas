@@ -16,10 +16,9 @@ synthesizer replaces this with an LLM faithfulness self-check.
 
 from __future__ import annotations
 
-import re
-
 from pydantic import BaseModel
 
+from .._tokenize import STOPWORDS, content_tokens
 from ..retrieval import RetrievedChunk
 
 
@@ -34,33 +33,21 @@ REFUSAL_TEXT = (
     "information is not covered by the corpus."
 )
 
-_WORD = re.compile(r"[a-z0-9$%.,]+")
-# Content words that, if present in the query but absent from every retrieved
-# span, indicate the corpus does not actually cover the question.
-_STOP = {
-    "the", "a", "an", "of", "to", "for", "and", "or", "is", "are", "what",
-    "which", "who", "does", "do", "above", "value", "need", "our", "with",
-    "at", "in", "on", "be", "by", "this", "that", "i", "can", "from", "into",
-    "policy", "purchase", "agreement",
-}
-
-
-def _content_tokens(s: str) -> set[str]:
-    return {t for t in _WORD.findall(s.lower()) if t not in _STOP and len(t) > 2}
+_DOMAIN_STOP = {"policy", "purchase", "agreement"}
 
 
 def grounding_overlap(question: str, retrieved: list[RetrievedChunk], top_n: int) -> float:
     """Fraction of the query's distinctive content tokens that appear in the
     top-n retrieved spans. 0 => nothing in the corpus addresses the query."""
-    q = _content_tokens(question)
+    q = content_tokens(question, min_len=3, extra_stop=_DOMAIN_STOP)
     if not q:
         return 0.0
-    ctx = set()
+    ctx: set[str] = set()
     for rc in retrieved[:top_n]:
-        ctx |= _content_tokens(rc.chunk.text)
+        ctx |= {t for t in rc.chunk.tokens if t not in STOPWORDS | _DOMAIN_STOP and len(t) >= 3}
         if rc.chunk.heading:
-            ctx |= _content_tokens(rc.chunk.heading)
-        ctx |= _content_tokens(rc.chunk.title)
+            ctx |= content_tokens(rc.chunk.heading, min_len=3, extra_stop=_DOMAIN_STOP)
+        ctx |= content_tokens(rc.chunk.title, min_len=3, extra_stop=_DOMAIN_STOP)
     return len(q & ctx) / len(q)
 
 

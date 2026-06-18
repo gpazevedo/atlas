@@ -1,0 +1,249 @@
+<svg viewBox="0 0 1320 940" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0d1421"/>
+      <stop offset="1" stop-color="#111a2b"/>
+    </linearGradient>
+    <linearGradient id="graphFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#15243a"/>
+      <stop offset="1" stop-color="#111d2f"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="11" markerHeight="11" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#5b87c4"/>
+    </marker>
+    <marker id="arrowLoop" markerWidth="11" markerHeight="11" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#cf9b5b"/>
+    </marker>
+    <marker id="arrowGate" markerWidth="11" markerHeight="11" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#b070b0"/>
+    </marker>
+    <marker id="arrowMcp" markerWidth="11" markerHeight="11" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#5fae9a"/>
+    </marker>
+    <style>
+      .title { fill:#eef3fb; font-size:29px; font-weight:700; letter-spacing:0.5px; }
+      .subtitle { fill:#7d92ad; font-size:13px; letter-spacing:2px; }
+      .lane { fill:#9fb3cc; font-size:13px; font-weight:700; letter-spacing:2px; }
+      .node-t { fill:#eaf1fb; font-size:15px; font-weight:600; }
+      .node-s { fill:#8ba3c2; font-size:11px; }
+      .edge-l { fill:#9fb8d8; font-size:11px; font-weight:600; }
+      .loop-l { fill:#d6a96a; font-size:10.5px; font-weight:600; letter-spacing:0.5px; }
+      .gate-l { fill:#c98fc9; font-size:10.5px; font-weight:600; }
+      .tag { fill:#6f8aa8; font-size:10px; letter-spacing:0.5px; }
+      .code { fill:#9ab0cc; font-size:10.5px; font-family:'SF Mono','Consolas',monospace; }
+      .legend { fill:#8ba3c2; font-size:12px; }
+      .mcp-t { fill:#bfe6da; font-size:15px; font-weight:600; }
+    </style>
+  </defs>
+
+  <rect width="1320" height="940" fill="url(#bg)"/>
+
+  <!-- header -->
+  <text x="56" y="56" class="title">ATLAS Counsel — LangGraph Implementation</text>
+  <text x="58" y="80" class="subtitle">STATEGRAPH · CONDITIONAL ROUTING · HUMAN-GATE · CHECKPOINTED  —  EXPOSED TO BUYER TEAM VIA MCP</text>
+
+  <!-- ============ LEFT: THE GRAPH ============ -->
+  <text x="56" y="126" class="lane">THE AGENT GRAPH  ·  langgraph.StateGraph</text>
+  <line x1="56" y1="136" x2="852" y2="136" stroke="#26344b" stroke-width="1"/>
+
+  <rect x="56" y="152" width="796" height="556" rx="16" fill="url(#graphFill)" stroke="#2c405d" stroke-width="1.3"/>
+
+  <!-- START -->
+  <ellipse cx="160" cy="196" rx="52" ry="20" fill="#1b2c46" stroke="#34507a" stroke-width="1.3"/>
+  <text x="160" y="201" text-anchor="middle" class="edge-l" fill="#cfe0f2">START</text>
+
+  <!-- PLAN -->
+  <g>
+    <rect x="96" y="244" width="184" height="74" rx="11" fill="#16243a" stroke="#34507a" stroke-width="1.3"/>
+    <text x="188" y="272" text-anchor="middle" class="node-t">plan</text>
+    <text x="188" y="292" text-anchor="middle" class="node-s">decompose question</text>
+    <text x="188" y="307" text-anchor="middle" class="node-s">into sub-queries</text>
+  </g>
+
+  <!-- RETRIEVE -->
+  <g>
+    <rect x="96" y="356" width="184" height="86" rx="11" fill="#16243a" stroke="#34507a" stroke-width="1.3"/>
+    <text x="188" y="384" text-anchor="middle" class="node-t">retrieve</text>
+    <text x="188" y="404" text-anchor="middle" class="node-s">hybrid search + rerank</text>
+    <text x="188" y="419" text-anchor="middle" class="node-s">per sub-query, merged</text>
+    <text x="188" y="434" text-anchor="middle" class="tag">tool: Qdrant pipeline</text>
+  </g>
+
+  <!-- VALIDATE (decision) -->
+  <g>
+    <rect x="96" y="480" width="184" height="86" rx="11" fill="#1a2433" stroke="#cf9b5b" stroke-width="1.4"/>
+    <text x="188" y="508" text-anchor="middle" class="node-t">validate</text>
+    <text x="188" y="528" text-anchor="middle" class="node-s">enough grounding?</text>
+    <text x="188" y="543" text-anchor="middle" class="node-s">conditional edge ⟶</text>
+    <text x="188" y="558" text-anchor="middle" class="tag">decision node</text>
+  </g>
+
+  <!-- SYNTHESIZE -->
+  <g>
+    <rect x="420" y="356" width="196" height="86" rx="11" fill="#16243a" stroke="#34507a" stroke-width="1.3"/>
+    <text x="518" y="384" text-anchor="middle" class="node-t">synthesize</text>
+    <text x="518" y="404" text-anchor="middle" class="node-s">LLM answer, citations</text>
+    <text x="518" y="419" text-anchor="middle" class="node-s">Pydantic-enforced</text>
+    <text x="518" y="434" text-anchor="middle" class="tag">structured output</text>
+  </g>
+
+  <!-- VERIFY (decision) -->
+  <g>
+    <rect x="420" y="480" width="196" height="86" rx="11" fill="#1a2433" stroke="#cf9b5b" stroke-width="1.4"/>
+    <text x="518" y="508" text-anchor="middle" class="node-t">verify</text>
+    <text x="518" y="528" text-anchor="middle" class="node-s">every claim ⟶ a span?</text>
+    <text x="518" y="543" text-anchor="middle" class="node-s">faithfulness self-check</text>
+    <text x="518" y="558" text-anchor="middle" class="tag">decision node</text>
+  </g>
+
+  <!-- HUMAN GATE -->
+  <g>
+    <rect x="660" y="244" width="168" height="86" rx="11" fill="#241a2e" stroke="#b070b0" stroke-width="1.4"/>
+    <text x="744" y="272" text-anchor="middle" class="node-t" fill="#e9cde9">human-gate</text>
+    <text x="744" y="292" text-anchor="middle" class="node-s">interrupt()</text>
+    <text x="744" y="307" text-anchor="middle" class="node-s">human-assisted decision</text>
+    <text x="744" y="322" text-anchor="middle" class="tag">resumes from checkpoint</text>
+  </g>
+
+  <!-- ANSWER / END -->
+  <g>
+    <rect x="660" y="480" width="168" height="86" rx="11" fill="#15263d" stroke="#34507a" stroke-width="1.3"/>
+    <text x="744" y="508" text-anchor="middle" class="node-t">finalize</text>
+    <text x="744" y="528" text-anchor="middle" class="node-s">grounded + cited</text>
+    <text x="744" y="543" text-anchor="middle" class="node-s">or refusal</text>
+    <text x="744" y="558" text-anchor="middle" class="tag">→ END</text>
+  </g>
+
+  <!-- EDGES -->
+  <!-- start -> plan -->
+  <line x1="160" y1="216" x2="173" y2="240" stroke="#5b87c4" stroke-width="1.7" marker-end="url(#arrow)"/>
+  <!-- plan -> retrieve -->
+  <line x1="188" y1="318" x2="188" y2="352" stroke="#5b87c4" stroke-width="1.7" marker-end="url(#arrow)"/>
+  <!-- retrieve -> validate -->
+  <line x1="188" y1="442" x2="188" y2="476" stroke="#5b87c4" stroke-width="1.7" marker-end="url(#arrow)"/>
+
+  <!-- validate -> synthesize (grounded) -->
+  <path d="M280,510 C340,510 360,399 416,399" fill="none" stroke="#5b87c4" stroke-width="1.7" marker-end="url(#arrow)"/>
+  <text x="312" y="470" class="edge-l">grounded</text>
+
+  <!-- validate -> human-gate (insufficient -> escalate): drop down, run along bottom-free corridor up to gate -->
+  <path d="M281,496 C360,470 372,200 560,200 C620,200 650,224 700,242" fill="none" stroke="#b070b0" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrowGate)"/>
+  <text x="372" y="192" class="gate-l">insufficient → escalate</text>
+
+  <!-- synthesize -> verify -->
+  <line x1="518" y1="442" x2="518" y2="476" stroke="#5b87c4" stroke-width="1.7" marker-end="url(#arrow)"/>
+
+  <!-- verify -> answer (pass) -->
+  <path d="M616,523 C636,523 642,523 656,523" fill="none" stroke="#5b87c4" stroke-width="1.7" marker-end="url(#arrow)"/>
+  <text x="624" y="514" class="edge-l">pass</text>
+
+  <!-- verify -> synthesize (retry loop): route out the right edge, up, back into synthesize right edge -->
+  <path d="M616,520 C648,520 648,400 620,400" fill="none" stroke="#cf9b5b" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrowLoop)"/>
+  <text x="628" y="464" class="loop-l">unfaithful</text>
+  <text x="628" y="478" class="loop-l">→ retry</text>
+
+  <!-- human-gate -> synthesize (approved, with guidance) -->
+  <path d="M700,330 C690,370 640,372 624,388" fill="none" stroke="#b070b0" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrowGate)"/>
+  <text x="648" y="356" class="gate-l">approve / steer</text>
+
+  <!-- human-gate -> answer (override refuse) -->
+  <path d="M790,330 C808,380 800,430 776,476" fill="none" stroke="#b070b0" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrowGate)"/>
+  <text x="800" y="408" class="gate-l">decline</text>
+
+  <!-- verify -> human-gate (retries exhausted) -->
+  <path d="M600,476 C640,440 700,380 728,334" fill="none" stroke="#b070b0" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#arrowGate)"/>
+  <text x="652" y="424" class="gate-l">exhausted</text>
+
+  <!-- STATE + CHECKPOINTER strip inside graph -->
+  <rect x="96" y="600" width="732" height="86" rx="11" fill="#101a2b" stroke="#2c405d" stroke-width="1.2"/>
+  <text x="116" y="624" class="node-t" fill="#cfe0f2">CounselState</text>
+  <text x="252" y="624" class="tag">— typed dict threaded through every node, merged via reducers</text>
+  <text x="116" y="648" class="code">question · sub_queries[] · retrieved[] · grounded · draft · verdict · attempts · escalated · human_input · answer</text>
+  <text x="116" y="672" class="code">checkpointer = </text>
+  <text x="232" y="672" class="code" fill="#7fae9a">SqliteSaver (default) · MemorySaver (dev CLI)</text>
+  <text x="530" y="672" class="tag">— per-thread state · interrupt + resume · time-travel</text>
+
+  <!-- ============ RIGHT: MCP INTEGRATION ============ -->
+  <text x="892" y="126" class="lane" fill="#a9d8c9">INTEGRATION  ·  BUYER TEAM</text>
+  <line x1="892" y1="136" x2="1312" y2="136" stroke="#2f4a42" stroke-width="1"/>
+
+  <!-- Buyer Team orchestrator -->
+  <g>
+    <rect x="892" y="152" width="420" height="128" rx="14" fill="#15243a" stroke="#34507a" stroke-width="1.3"/>
+    <text x="912" y="180" class="node-t">Buyer Team Orchestrator</text>
+    <text x="912" y="200" class="node-s">existing platform · AWS Bedrock + Strands</text>
+    <text x="912" y="216" class="node-s">Step Functions workflow</text>
+    <line x1="912" y1="228" x2="1292" y2="228" stroke="#26344b" stroke-width="1"/>
+    <text x="912" y="248" class="tag">tools: contract store · approvals · notify ·</text>
+    <text x="912" y="265" class="tag" fill="#8fc7b6">  ▸ ATLAS Counsel  (this graph, as one tool)</text>
+  </g>
+
+  <!-- arrow down to MCP -->
+  <line x1="1102" y1="280" x2="1102" y2="316" stroke="#5fae9a" stroke-width="1.7" marker-end="url(#arrowMcp)"/>
+  <text x="1114" y="302" class="tag" fill="#8fc7b6">calls tool</text>
+
+  <!-- MCP server boundary -->
+  <g>
+    <rect x="892" y="322" width="420" height="222" rx="14" fill="#142420" stroke="#3a5d52" stroke-width="1.5"/>
+    <text x="912" y="350" class="mcp-t">MCP Server</text>
+    <text x="1018" y="350" class="tag" fill="#7fae9a">— Model Context Protocol</text>
+    <text x="912" y="372" class="node-s">exposes the graph as callable tools</text>
+
+    <rect x="912" y="382" width="380" height="28" rx="7" fill="#16243a" stroke="#3a5d52"/>
+    <text x="926" y="400" class="code" fill="#a9d8c9">counsel_ask(q) → {status, answer, citations, thread_id}</text>
+
+    <rect x="912" y="416" width="380" height="28" rx="7" fill="#16243a" stroke="#3a5d52"/>
+    <text x="926" y="434" class="code" fill="#a9d8c9">counsel_resume(thread_id, action) → continue paused run</text>
+
+    <rect x="912" y="450" width="380" height="28" rx="7" fill="#16243a" stroke="#3a5d52"/>
+    <text x="926" y="468" class="code" fill="#a9d8c9">counsel_brief(vendor) → negotiation pre-brief</text>
+
+    <rect x="912" y="484" width="380" height="28" rx="7" fill="#16243a" stroke="#3a5d52"/>
+    <text x="926" y="502" class="code" fill="#a9d8c9">counsel_health() → deep health check</text>
+  </g>
+
+  <!-- arrow MCP -> graph invoke -->
+  <line x1="1102" y1="544" x2="1102" y2="564" stroke="#5fae9a" stroke-width="1.7" marker-end="url(#arrowMcp)"/>
+  <text x="1114" y="560" class="tag" fill="#8fc7b6">invoke</text>
+
+  <!-- FastAPI runtime -->
+  <g>
+    <rect x="892" y="570" width="420" height="160" rx="14" fill="#15243a" stroke="#34507a" stroke-width="1.3"/>
+    <text x="912" y="598" class="node-t">FastAPI Runtime</text>
+    <text x="912" y="618" class="node-s">POST /ask · POST /resume · GET /health · WS /ws/ask (streams nodes)</text>
+    <line x1="912" y1="630" x2="1292" y2="630" stroke="#26344b" stroke-width="1"/>
+    <text x="912" y="652" class="code" fill="#9ab0cc">graph = build_counsel_graph()</text>
+    <text x="912" y="672" class="code" fill="#9ab0cc">graph.invoke(state, config={thread_id})</text>
+    <text x="912" y="694" class="tag">↑ one CounselService backs HTTP and MCP identically</text>
+    <text x="912" y="714" class="tag" fill="#7d92ad">needs_input + thread_id = resume token across stateless calls</text>
+  </g>
+
+  <!-- connecting line from FastAPI runtime back to graph (it runs it) -->
+  <path d="M890,638 C872,638 862,504 858,474" fill="none" stroke="#5fae9a" stroke-width="1.4" stroke-dasharray="2 5" marker-end="url(#arrowMcp)"/>
+  <text x="868" y="569" class="tag" fill="#5fae9a" transform="rotate(-90 868 569)">runtime runs the graph →</text>
+
+  <!-- ============ LEGEND ============ -->
+  <line x1="56" y1="764" x2="1312" y2="764" stroke="#26344b" stroke-width="1"/>
+
+  <line x1="56" y1="790" x2="92" y2="790" stroke="#5b87c4" stroke-width="1.7" marker-end="url(#arrow)"/>
+  <text x="100" y="794" class="legend">normal edge</text>
+
+  <line x1="220" y1="790" x2="256" y2="790" stroke="#cf9b5b" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrowLoop)"/>
+  <text x="264" y="794" class="legend">retry loop (bounded by attempts)</text>
+
+  <line x1="480" y1="790" x2="516" y2="790" stroke="#b070b0" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrowGate)"/>
+  <text x="524" y="794" class="legend">human-gate path (interrupt / resume)</text>
+
+  <line x1="760" y1="790" x2="796" y2="790" stroke="#5fae9a" stroke-width="1.7" marker-end="url(#arrowMcp)"/>
+  <text x="804" y="794" class="legend">MCP / runtime boundary</text>
+
+  <rect x="980" y="782" width="16" height="16" rx="4" fill="#1a2433" stroke="#cf9b5b" stroke-width="1.4"/>
+  <text x="1004" y="794" class="legend">conditional decision node</text>
+
+  <!-- maps-to-JD footnote -->
+  <text x="56" y="834" class="tag" fill="#6f8aa8">plan / execution / validation / human-assisted decision-making  ·  reliable tool-calling  ·  long-running state + checkpointing  ·  structured outputs  ·  this whole graph = one tool to Buyer Team</text>
+
+  <!-- status -->
+  <text x="56" y="870" class="subtitle" fill="#7d92ad">IMPLEMENTED · AGENT + MCP / FASTAPI RUNTIME · RESILIENT · 63 TESTS</text>
+  <text x="1312" y="898" text-anchor="end" class="legend" fill="#6f8aa8">63 tests passing · measured by the eval harness</text>
+</svg>

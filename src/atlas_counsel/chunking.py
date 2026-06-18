@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from ._tokenize import tokenize
 from .corpus.models import Corpus, DocCategory
 
 
@@ -23,6 +24,9 @@ class Chunk(BaseModel):
     vendor: str | None = None
     heading: str | None = None
     text: str = Field(..., min_length=1)
+    # Precomputed tokens so downstream (reranker, judge, answerer) don't
+    # re-run regex on the same text repeatedly.
+    tokens: list[str] = Field(default_factory=list)
 
     @property
     def embed_text(self) -> str:
@@ -48,6 +52,7 @@ def chunk_corpus(corpus: Corpus) -> list[Chunk]:
                     vendor=doc.vendor,
                     heading=span.heading,
                     text=span.text,
+                    tokens=tokenize(span.text),
                 )
             )
     return chunks

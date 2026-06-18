@@ -57,7 +57,7 @@ pytest tests/test_qdrant_integration.py -v
 ### Planted hard cases (each tagged, so eval can slice on them)
 
 | Trap | Where | Tests |
-|------|-------|-------|
+| ------ | ------- | ------- |
 | Contradiction | AcmeCloud 99.9% vs NorthLink 99.5% uptime | cross-document reasoning |
 | Threshold precision | POL-001 ($50k) vs near-duplicate POL-002 ($25k) | reranker precision |
 | Unanswerable | supplier-gift question (Q-006) | refuse-if-ungrounded |
@@ -104,7 +104,7 @@ Two optional stages compose around the base hybrid retriever via
 `RetrievalPipeline`, each independently toggleable so the eval harness can
 attribute any metric change to a specific stage (ablation):
 
-```
+```text
 query --(decompose?)--> sub-queries --retrieve+merge--> --(rerank?)--> top_k
 ```
 
@@ -192,6 +192,7 @@ uv run python -m atlas_counsel.service.mcp_server      # MCP stdio server
 ```
 
 **REST**
+
 - `POST /ask {question}` → `{status, thread_id, answer, citations[]}`
 - `POST /resume {thread_id, action, guidance?}` → same shape
 - `WS /ws/ask` → streams `{event:"node", node}` per step, then a terminal
@@ -210,7 +211,7 @@ MCP — this is the integration boundary, with neither system absorbing the othe
 
 ## Layout
 
-```
+```text
 src/atlas_counsel/corpus/
   models.py      # Pydantic schema — the citation contract
   generator.py   # deterministic content + planted hard cases
@@ -218,6 +219,7 @@ src/atlas_counsel/corpus/
 tests/           # determinism, integrity, hard-case guards
 data/            # generated (gitignored)
 ```
+
 ## Evaluation harness
 
 Measured before any agent exists, so every later change is regression-checked.
@@ -253,7 +255,7 @@ Two optional stages compose around the base hybrid retriever via
 `RetrievalPipeline`, each independently toggleable so the eval harness can
 attribute any metric change to a specific stage (ablation):
 
-```
+```text
 query --(decompose?)--> sub-queries --retrieve+merge--> --(rerank?)--> top_k
 ```
 
@@ -294,7 +296,7 @@ python -m atlas_counsel.agent --q "policy on supplier gifts?" --decline
 
 Flow:
 
-```
+```text
 plan -> retrieve -> validate
 validate --grounded--> synthesize        --insufficient--> human_gate
 synthesize -> verify
@@ -341,6 +343,7 @@ uv run python -m atlas_counsel.service.mcp_server      # MCP stdio server
 ```
 
 **REST**
+
 - `POST /ask {question}` → `{status, thread_id, answer, citations[]}`
 - `POST /resume {thread_id, action, guidance?}` → same shape
 - `WS /ws/ask` → streams `{event:"node", node}` per step, then a terminal
@@ -359,7 +362,7 @@ MCP — this is the integration boundary, with neither system absorbing the othe
 
 ## Layout
 
-```
+```text
 src/atlas_counsel/
   corpus/          # synthetic corpus generator + golden set (PR1)
   chunking.py      # span -> chunk, preserving citation ids

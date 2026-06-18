@@ -1,0 +1,13 @@
+# Local Qdrant for the hybrid retriever. `docker compose up -d`, then:
+#   pip install -e ".[qdrant]"
+#   python -m atlas_counsel.ingest --url http://localhost:6333
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"   # REST + Query API
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_storage:/qdrant/storage
+volumes:
+  qdrant_storage:

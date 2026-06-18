@@ -2,11 +2,12 @@
 name = "atlas-counsel"
 version = "0.1.0"
 description = "Citation-grounded agentic RAG over a synthetic procurement corpus."
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 dependencies = ["pydantic>=2.6"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+qdrant = ["qdrant-client>=1.12"]
 
 [project.scripts]
 atlas-corpus = "atlas_counsel.corpus.__main__:main"

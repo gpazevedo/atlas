@@ -1,10 +1,17 @@
 {
-  "// note": "Example MCP client entry for Buyer Team's orchestrator to call ATLAS Counsel.",
+  "// note": "Example MCP client entries for Buyer Team's Strands orchestrator.",
+  "// local": "Run ATLAS Counsel as a local subprocess (stdin/stdout MCP).",
+  "// remote": "Connect to the deployed AWS instance over Streamable HTTP.",
   "mcpServers": {
-    "atlas-counsel": {
+    "atlas-counsel-local": {
       "command": "uv",
       "args": ["run", "python", "-m", "atlas_counsel.service.mcp_server"],
-      "description": "Procurement RAG: counsel_ask, counsel_resume, counsel_brief"
+      "description": "Procurement RAG: counsel_ask, counsel_resume, counsel_brief, counsel_health"
+    },
+    "atlas-counsel-remote": {
+      "url": "http://<alb-dns-name>/mcp",
+      "transport": "streamable-http",
+      "description": "Procurement RAG (remote deployment)"
     }
   }
 }

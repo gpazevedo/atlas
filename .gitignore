@@ -5,3 +5,10 @@ __pycache__/
 *.egg-info/
 /data/
 *.db
+# Terraform
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/terraform.tfvars
+# Environment
+.env

@@ -15,6 +15,7 @@ Requires: `pip install qdrant-client` and a running Qdrant
 from __future__ import annotations
 
 import logging
+import os
 
 from tenacity import (
     retry,
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 DENSE_VEC = "dense"
 SPARSE_VEC = "sparse"
 QDRANT_TIMEOUT = 5
+QDRANT_URL = os.environ.get("QDRANT_URL", "http://localhost:6333")
 
 _RETRYABLE = retry(
     # Catch network-level errors (ConnectionError, TimeoutError, and
@@ -51,7 +53,7 @@ class QdrantHybridRetriever:
     def __init__(
         self,
         provider: EmbeddingProvider,
-        url: str = "http://localhost:6333",
+        url: str = QDRANT_URL,
         rrf_k: int = 60,
         client=None,
     ) -> None:
@@ -59,6 +61,10 @@ class QdrantHybridRetriever:
         self._rrf_k = rrf_k
         self._url = url
         self._client = client  # injectable for testing
+
+    @property
+    def url(self) -> str:
+        return self._url
 
     @property
     def collection_name(self) -> str:

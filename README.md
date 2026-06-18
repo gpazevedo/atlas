@@ -13,11 +13,11 @@ This first slice ships the **corpus generator + golden eval set** plus a
 ```bash
 uv sync --extra dev
 atlas-corpus                          # generate the corpus
-uv run pytest                         # 39 tests, no external services
+uv run pytest                         # 44 tests, no external services
 
 # full suite (service + Qdrant resilience):
 uv sync --extra dev --extra service --extra qdrant
-uv run pytest                         # 63 tests
+uv run pytest                         # 69 tests
 
 # hybrid retrieval, offline (in-memory, no Qdrant):
 uv run python -m atlas_counsel.ingest --dry-run
@@ -179,9 +179,11 @@ human_gate --steer--> synthesize         --decline--> finalize(refuse)
 
 ### Buyer Team integration
 
-The compiled graph is exposed as an MCP tool (`counsel.ask`, `counsel.brief`)
-so Buyer Team's Strands orchestrator calls it as one tool among its own. That
-PR adds the MCP server + FastAPI/WebSocket runtime around this graph.
+The compiled graph is exposed as four MCP tools (`counsel.ask`, `counsel.resume`,
+`counsel.brief`, `counsel.health`) so Buyer Team's Strands orchestrator calls it
+as one tool among its own. All tools accept a `tenant_id` for multi-tenant
+isolation. Deployed remotely over Streamable HTTP or locally over stdio (see
+`buyer-team-mcp.example.json`).
 
 ## Runtime: FastAPI + MCP
 
@@ -197,8 +199,8 @@ uv run python -m atlas_counsel.service.mcp_server      # MCP stdio server
 
 **REST**
 
-- `POST /ask {question}` → `{status, thread_id, answer, citations[]}`
-- `POST /resume {thread_id, action, guidance?}` → same shape
+- `POST /ask {tenant_id, question}` → `{status, thread_id, answer, citations[]}`
+- `POST /resume {tenant_id, thread_id, action, guidance?}` → same shape
 - `WS /ws/ask` → streams `{event:"node", node}` per step, then a terminal
   `result` / `needs_input` frame (the JD's streaming requirement)
 
@@ -209,9 +211,9 @@ continues it. The checkpointer carries state across those two independent
 calls — the core integration design.
 
 **MCP tools** (what Buyer Team calls): `counsel_ask`, `counsel_resume`,
-`counsel_brief`, `counsel_health`. See `buyer-team-mcp.example.json` for the client entry. The
-Strands orchestrator lists these alongside its own tools and invokes them over
-MCP — this is the integration boundary, with neither system absorbing the other.
+`counsel_brief`, `counsel_health`. All accept `tenant_id` for multi-tenant
+isolation. See `buyer-team-mcp.example.json` for the client entry — supports
+local (stdio) and remote (Streamable HTTP) configurations.
 
 ## Architecture
 
@@ -219,24 +221,55 @@ MCP — this is the integration boundary, with neither system absorbing the othe
 
 ![LangGraph Implementation](images/atlas-counsel-langgraph.svg)
 
+## Deployment
+
+AWS ECS Fargate with Qdrant Cloud. Per-tenant SQLite checkpoints on EFS.
+
+```bash
+# Infrastructure
+cd infra
+cp terraform.tfvars.example terraform.tfvars  # set your qdrant_url
+terraform init && terraform apply
+
+# CI/CD deploys on push to main (build → ECR → ECS).
+```
+
+The deployed service exposes both HTTP REST and MCP on the same port:
+
+- `GET  /health` — health check
+- `POST /ask {tenant_id, question}` — answer with citations
+- `POST /resume {tenant_id, thread_id, action}` — resume paused run
+- `GET  /mcp` — MCP Streamable HTTP endpoint
+- `WS   /ws/ask` — streaming progress
+
+All endpoints require a `tenant_id` (defaults to `"default"` for single-tenant
+use). See `buyer-team-mcp.example.json` for local and remote MCP client configs.
+
 ## Layout
 
 ```text
 src/atlas_counsel/
-  _tokenize.py     # shared tokenizer (used by reranker, judge, answerer)
-  corpus/          # synthetic corpus generator + golden set
-  chunking.py      # span -> chunk, preserving citation ids (precomputed tokens)
-  embeddings.py    # EmbeddingProvider protocol + offline HashingEmbedder
-  retrieval.py     # Retriever protocol, RRF fusion, in-memory hybrid
-  qdrant_store.py  # production Qdrant hybrid retriever (retry + timeout)
-  ingest.py        # CLI: build -> chunk -> index
-  eval/            # metrics, judge protocol, runner, A/B report, Langfuse hook
-  rerank.py        # Reranker protocol, offline proxy + cross-encoder
-  decompose.py     # conditional query decomposition
-  pipeline.py      # composed decompose->retrieve->merge->rerank
-  ablation.py      # CLI: measure each stage's effect
-  agent/           # LangGraph StateGraph: state, schemas, nodes, graph, llm
-  service/         # CounselService + FastAPI api + MCP server (one logic, two transports)
-tests/             # 63 tests covering corpus, retrieval, agent, service, resilience
-docker-compose.yml # local Qdrant
+  _tokenize.py         # shared tokenizer (used by reranker, judge, answerer)
+  corpus/              # synthetic corpus generator + golden set
+  chunking.py          # span -> chunk, preserving citation ids
+  embeddings.py        # EmbeddingProvider protocol + HashingEmbedder
+  retrieval.py         # Retriever protocol, RRF fusion, in-memory hybrid
+  qdrant_store.py      # production Qdrant hybrid retriever (retry + timeout)
+  ingest.py            # CLI: build -> chunk -> index
+  eval/                # metrics, judge protocol, runner, A/B report, Langfuse
+  rerank.py            # Reranker protocol + offline proxy + cross-encoder
+  decompose.py         # conditional query decomposition
+  pipeline.py          # composed decompose->retrieve->merge->rerank
+  ablation.py          # CLI: measure each stage's effect
+  agent/               # LangGraph StateGraph: state, nodes, graph, llm
+  service/
+    api.py             # FastAPI REST + WebSocket + mounted MCP
+    core.py            # CounselService (transport-agnostic)
+    mcp_server.py      # MCP tools + remote transport
+    tenants.py         # TenantRegistry (per-tenant SqliteSaver)
+tests/
+infra/                 # Terraform: ECS, ALB, EFS, ECR
+.github/workflows/     # CI (test) + CD (deploy)
+Dockerfile
+docker-compose.yml     # local Qdrant
 ```

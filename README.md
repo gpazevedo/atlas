@@ -93,10 +93,44 @@ python -m atlas_counsel.eval --ab   # A/B two embedding configs
   handled — not just the easy ones.
 - **A/B table** across two retrievers (two embedding providers) is the
   harness's native output — the artifact the provider abstraction exists for.
-- **Langfuse** export is optional (`uv sync --extra langfuse`, set
+- **Langfuse** export is optional (`pip install -e ".[langfuse]"`, set
   `LANGFUSE_*` env); a silent no-op otherwise so CI never depends on it.
 - A **regression gate** (`tests/test_eval.py`) locks in current aggregate
   quality so future changes fail loudly instead of degrading silently.
+
+## Advanced retrieval: rerank + query decomposition
+
+Two optional stages compose around the base hybrid retriever via
+`RetrievalPipeline`, each independently toggleable so the eval harness can
+attribute any metric change to a specific stage (ablation):
+
+```
+query --(decompose?)--> sub-queries --retrieve+merge--> --(rerank?)--> top_k
+```
+
+- **Reranking.** `Reranker` protocol. `TokenInteractionReranker` is a
+  deterministic offline proxy for CI (query-doc token interaction + a
+  proportional phrase-adjacency bonus, scored without ever consulting golden
+  spans). `CrossEncoderReranker` wraps bge-reranker-v2-m3 for production
+  (`uv sync --extra rerank`).
+- **Query decomposition.** Conditional by design — a query is split only when
+  it names >= 2 known entities AND carries a comparison cue, so simple queries
+  pass through untouched (tested). Multi-hop questions retrieve per-entity and
+  merge, recovering the starved side.
+
+### Honest ablation
+
+```bash
+python -m atlas_counsel.ablation
+```
+
+On the current small corpus, first-stage hybrid nearly saturates retrieval, so
+the **offline lexical proxies show no net gain** (rerank slightly lowers
+precision; decomposition is net-neutral). This is reported, not hidden. The
+stages ship as correct, unit-tested infrastructure; the production
+cross-encoder and an LLM decomposer are the implementations expected to win,
+and this same harness is how you confirm it locally. The proxies are
+deliberately NOT tuned toward the golden spans to manufacture an improvement.
 
 ## Layout
 
@@ -132,10 +166,44 @@ python -m atlas_counsel.eval --ab   # A/B two embedding configs
   handled — not just the easy ones.
 - **A/B table** across two retrievers (two embedding providers) is the
   harness's native output — the artifact the provider abstraction exists for.
-- **Langfuse** export is optional (`uv sync --extra langfuse`, set
+- **Langfuse** export is optional (`pip install -e ".[langfuse]"`, set
   `LANGFUSE_*` env); a silent no-op otherwise so CI never depends on it.
 - A **regression gate** (`tests/test_eval.py`) locks in current aggregate
   quality so future changes fail loudly instead of degrading silently.
+
+## Advanced retrieval: rerank + query decomposition
+
+Two optional stages compose around the base hybrid retriever via
+`RetrievalPipeline`, each independently toggleable so the eval harness can
+attribute any metric change to a specific stage (ablation):
+
+```
+query --(decompose?)--> sub-queries --retrieve+merge--> --(rerank?)--> top_k
+```
+
+- **Reranking.** `Reranker` protocol. `TokenInteractionReranker` is a
+  deterministic offline proxy for CI (query-doc token interaction + a
+  proportional phrase-adjacency bonus, scored without ever consulting golden
+  spans). `CrossEncoderReranker` wraps bge-reranker-v2-m3 for production
+  (`uv sync --extra rerank`).
+- **Query decomposition.** Conditional by design — a query is split only when
+  it names >= 2 known entities AND carries a comparison cue, so simple queries
+  pass through untouched (tested). Multi-hop questions retrieve per-entity and
+  merge, recovering the starved side.
+
+### Honest ablation
+
+```bash
+python -m atlas_counsel.ablation
+```
+
+On the current small corpus, first-stage hybrid nearly saturates retrieval, so
+the **offline lexical proxies show no net gain** (rerank slightly lowers
+precision; decomposition is net-neutral). This is reported, not hidden. The
+stages ship as correct, unit-tested infrastructure; the production
+cross-encoder and an LLM decomposer are the implementations expected to win,
+and this same harness is how you confirm it locally. The proxies are
+deliberately NOT tuned toward the golden spans to manufacture an improvement.
 
 ## Layout
 
@@ -148,6 +216,10 @@ src/atlas_counsel/
   qdrant_store.py  # production Qdrant hybrid retriever (named vectors + RRF)
   ingest.py        # CLI: build -> chunk -> index
   eval/            # metrics, judge protocol, runner, A/B report, Langfuse hook
+  rerank.py        # Reranker protocol, offline proxy + cross-encoder
+  decompose.py     # conditional query decomposition
+  pipeline.py      # composed decompose->retrieve->merge->rerank
+  ablation.py      # CLI: measure each stage's effect
 tests/             # corpus + retrieval + (skipped) Qdrant integration
 docker-compose.yml # local Qdrant
 ```

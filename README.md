@@ -13,16 +13,20 @@ This first slice ships the **corpus generator + golden eval set** plus a
 ```bash
 uv sync --extra dev
 atlas-corpus                          # generate the corpus
-pytest                                # 63 tests, no external services
+uv run pytest                         # 39 tests, no external services
+
+# full suite (service + Qdrant resilience):
+uv sync --extra dev --extra service --extra qdrant
+uv run pytest                         # 63 tests
 
 # hybrid retrieval, offline (in-memory, no Qdrant):
-python -m atlas_counsel.ingest --dry-run
+uv run python -m atlas_counsel.ingest --dry-run
 
 # hybrid retrieval against real Qdrant:
 docker compose up
 uv sync --extra qdrant
-python -m atlas_counsel.ingest --url http://localhost:6333
-pytest tests/test_qdrant_integration.py -v
+uv run python -m atlas_counsel.ingest --url http://localhost:6333
+uv run pytest tests/test_qdrant_integration.py -v
 ```
 
 ## Retrieval design
@@ -74,8 +78,8 @@ eval numbers trustworthy.
 Measured before any agent exists, so every later change is regression-checked.
 
 ```bash
-python -m atlas_counsel.eval        # aggregate + per-tag breakdown
-python -m atlas_counsel.eval --ab   # A/B two embedding configs
+uv run python -m atlas_counsel.eval        # aggregate + per-tag breakdown
+uv run python -m atlas_counsel.eval --ab   # A/B two embedding configs
 ```
 
 - **Retrieval metrics** (no LLM, exact): hit@k, context recall, context
@@ -121,7 +125,7 @@ query --(decompose?)--> sub-queries --retrieve+merge--> --(rerank?)--> top_k
 ### Honest ablation
 
 ```bash
-python -m atlas_counsel.ablation
+uv run python -m atlas_counsel.ablation
 ```
 
 On the current small corpus, first-stage hybrid nearly saturates retrieval, so
@@ -139,13 +143,13 @@ checkpointed human-gate, and a bounded verify/retry loop. Replaces the eval
 stub answerer and the PR3 lexical-refusal proxy with real graph logic.
 
 ```bash
-python -m atlas_counsel.agent --q "who approves a $60,000 purchase?"
-python -m atlas_counsel.agent --q "policy on supplier gifts?" --decline
+uv run python -m atlas_counsel.agent --q "who approves a $60,000 purchase?"
+uv run python -m atlas_counsel.agent --q "policy on supplier gifts?" --decline
 ```
 
 Flow:
 
-```
+```text
 plan -> retrieve -> validate
 validate --grounded--> synthesize        --insufficient--> human_gate
 synthesize -> verify

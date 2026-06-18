@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import pytest
 
+pytest.importorskip("qdrant_client", reason="qdrant-client not installed")
+
 from atlas_counsel.embeddings import HashingEmbedder
 from atlas_counsel.qdrant_store import QDRANT_TIMEOUT, QdrantHybridRetriever
 

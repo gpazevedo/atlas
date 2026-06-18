@@ -4,7 +4,7 @@ Endpoints (all thin wrappers over the service — no logic here):
 
   POST /ask            {question}             -> AskResult
   POST /resume         {thread_id, action,..} -> AskResult
-  GET  /health                                -> {status}
+  GET  /health                                -> {status, ...}
   WS   /ws/ask         stream node-by-node progress, then the result
 
 The WebSocket demonstrates the "real-time / streaming AI experiences" the JD
@@ -14,20 +14,24 @@ terminal frame with the final result (or a needs_input frame at the gate).
 
 from __future__ import annotations
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
+import logging
+
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from .core import AskResult, AskStatus, CounselService
 
+logger = logging.getLogger(__name__)
+
 
 class AskRequest(BaseModel):
-    question: str
-    thread_id: str | None = None
+    question: str = Field(..., min_length=1, max_length=2000)
 
 
 class ResumeRequest(BaseModel):
-    thread_id: str
-    action: str  # "steer" | "decline"
+    thread_id: str = Field(..., min_length=1)
+    action: str = Field(..., pattern=r"^(steer|decline)$")
     guidance: str | None = None
 
 
@@ -37,13 +41,13 @@ def create_app(service: CounselService | None = None) -> FastAPI:
 
     @app.get("/health")
     def health() -> dict:
-        return {"status": "ok"}
+        return service.deep_health()
 
-    @app.post("/ask", response_model=AskResult)
+    @app.post("/ask")
     def ask(req: AskRequest) -> AskResult:
-        return service.ask(req.question, thread_id=req.thread_id)
+        return service.ask(req.question)
 
-    @app.post("/resume", response_model=AskResult)
+    @app.post("/resume")
     def resume(req: ResumeRequest) -> AskResult:
         return service.resume(req.thread_id, req.action, guidance=req.guidance)
 
@@ -51,14 +55,25 @@ def create_app(service: CounselService | None = None) -> FastAPI:
     async def ws_ask(ws: WebSocket) -> None:
         await ws.accept()
         try:
-            req = await ws.receive_json()
-            question = req["question"]
-            thread_id = req.get("thread_id")
-            # Stream the graph node-by-node, then send the terminal frame.
+            data = await ws.receive_json()
+            question = data["question"]
+            thread_id = data.get("thread_id")
             async for frame in service.astream(question, thread_id=thread_id):
                 await ws.send_json(frame)
         except WebSocketDisconnect:
             return
+
+    @app.exception_handler(Exception)
+    async def _exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        logger.error("unhandled exception", exc_info=exc)
+        return JSONResponse(
+            status_code=500,
+            content=AskResult(
+                status=AskStatus.ERROR,
+                thread_id="",
+                answer=str(exc),
+            ).model_dump(),
+        )
 
     return app
 

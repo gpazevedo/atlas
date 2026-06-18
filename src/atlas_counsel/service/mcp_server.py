@@ -9,7 +9,7 @@ Run as an MCP stdio server:
 
     python -m atlas_counsel.service.mcp_server
 
-Buyer Team (or any MCP client) then connects and sees three tools.
+Buyer Team (or any MCP client) then connects and sees four tools.
 """
 
 from __future__ import annotations
@@ -33,6 +33,10 @@ def _build_server():
         Returns a dict with status (answered | refused | needs_input), the
         answer text, citations (span ids), and a thread_id. If status is
         needs_input, call counsel_resume with that thread_id."""
+        if not question or not question.strip():
+            return {"status": "error", "answer": "question must not be empty"}
+        if len(question) > 2000:
+            return {"status": "error", "answer": "question too long"}
         return _service.ask(question).model_dump()
 
     @mcp.tool()
@@ -41,9 +45,16 @@ def _build_server():
 
         action is 'steer' (proceed, optionally guided by `guidance`, e.g. a
         document id) or 'decline' (refuse safely)."""
+        if action not in ("steer", "decline"):
+            return {"status": "error", "answer": "action must be 'steer' or 'decline'"}
         return _service.resume(
             thread_id, action, guidance=guidance or None
         ).model_dump()
+
+    @mcp.tool()
+    def counsel_health() -> dict:
+        """Deep health check: verifies graph, checkpointer, and retriever."""
+        return _service.deep_health()
 
     @mcp.tool()
     def counsel_brief(vendor: str) -> dict:

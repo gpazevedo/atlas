@@ -14,12 +14,37 @@ Requires: `pip install qdrant-client` and a running Qdrant
 
 from __future__ import annotations
 
+import logging
+
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
+
 from .chunking import Chunk
 from .embeddings import EmbeddingProvider
 from .retrieval import RetrievedChunk
 
+logger = logging.getLogger(__name__)
+
 DENSE_VEC = "dense"
 SPARSE_VEC = "sparse"
+QDRANT_TIMEOUT = 5
+
+_RETRYABLE = retry(
+    # Catch network-level errors (ConnectionError, TimeoutError, and
+    # urllib3/requests connection failures caught via their OSError base).
+    retry=retry_if_exception_type((ConnectionError, TimeoutError, OSError)),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=10),
+    reraise=True,
+    before_sleep=lambda retry_state: logger.warning(
+        "Qdrant retry %d/%d after error: %s",
+        retry_state.attempt_number, 3, retry_state.outcome.exception()
+    ) if retry_state.outcome else None,
+)
 
 
 class QdrantHybridRetriever:
@@ -43,9 +68,10 @@ class QdrantHybridRetriever:
         if self._client is None:
             from qdrant_client import QdrantClient  # local import: optional dep
 
-            self._client = QdrantClient(url=self._url)
+            self._client = QdrantClient(url=self._url, timeout=QDRANT_TIMEOUT)
         return self._client
 
+    @_RETRYABLE
     def ensure_collection(self) -> None:
         from qdrant_client import models as qm
 
@@ -68,6 +94,7 @@ class QdrantHybridRetriever:
             },
         )
 
+    @_RETRYABLE
     def index(self, chunks: list[Chunk], batch_size: int = 64) -> None:
         from qdrant_client import models as qm
 
@@ -97,6 +124,7 @@ class QdrantHybridRetriever:
                 points=points[start : start + batch_size],
             )
 
+    @_RETRYABLE
     def search(self, query: str, top_k: int = 5) -> list[RetrievedChunk]:
         from qdrant_client import models as qm
 

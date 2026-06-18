@@ -8,6 +8,7 @@ dependencies = ["pydantic>=2.6"]
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 qdrant = ["qdrant-client>=1.12"]
+langfuse = ["langfuse>=2.0"]
 
 [project.scripts]
 atlas-corpus = "atlas_counsel.corpus.__main__:main"

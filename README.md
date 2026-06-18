@@ -112,7 +112,7 @@ query --(decompose?)--> sub-queries --retrieve+merge--> --(rerank?)--> top_k
   deterministic offline proxy for CI (query-doc token interaction + a
   proportional phrase-adjacency bonus, scored without ever consulting golden
   spans). `CrossEncoderReranker` wraps bge-reranker-v2-m3 for production
-  (`uv sync --extra rerank`).
+  (`pip install -e ".[rerank]"`).
 - **Query decomposition.** Conditional by design — a query is split only when
   it names >= 2 known entities AND carries a comparison cue, so simple queries
   pass through untouched (tested). Multi-hop questions retrieve per-entity and
@@ -131,6 +131,53 @@ stages ship as correct, unit-tested infrastructure; the production
 cross-encoder and an LLM decomposer are the implementations expected to win,
 and this same harness is how you confirm it locally. The proxies are
 deliberately NOT tuned toward the golden spans to manufacture an improvement.
+
+## The agent: LangGraph StateGraph
+
+The orchestration layer. A compiled `StateGraph` with conditional routing, a
+checkpointed human-gate, and a bounded verify/retry loop. Replaces the eval
+stub answerer and the PR3 lexical-refusal proxy with real graph logic.
+
+```bash
+python -m atlas_counsel.agent --q "who approves a $60,000 purchase?"
+python -m atlas_counsel.agent --q "policy on supplier gifts?" --decline
+```
+
+Flow:
+
+```
+plan -> retrieve -> validate
+validate --grounded--> synthesize        --insufficient--> human_gate
+synthesize -> verify
+verify --pass--> finalize -> END
+       --unfaithful & attempts<MAX--> synthesize   (bounded retry)
+       --unfaithful & exhausted--> human_gate
+human_gate --steer--> synthesize         --decline--> finalize(refuse)
+```
+
+- **Structured outputs / citation grounding.** `synthesize` emits a Pydantic
+  `DraftAnswer` whose every `Claim` carries a `span_id`; `verify` rejects any
+  claim citing a span that wasn't retrieved. A hallucinated citation is caught,
+  not shipped — proven by `test_hallucination_is_bounded_and_escalates`.
+- **Human-assisted decisions.** `human_gate` uses LangGraph `interrupt()`; the
+  run pauses, the caller resumes with `Command(resume=...)` to steer or
+  decline. State survives the pause via the checkpointer.
+- **Bounded loops.** The verify→synthesize retry is capped at `MAX_ATTEMPTS`,
+  then escalates — no unbounded LLM spinning.
+- **Provider abstraction.** `LLMProvider` protocol with an offline
+  `TemplateLLM` for CI (cites only retrieved spans, never fabricates) and real
+  Ollama/Bedrock injected locally. Checkpointer is injected too: MemorySaver
+  (dev) or Sqlite/Postgres (prod).
+- **Measured, not asserted.** Run over the golden set the agent matches the
+  stub: correct refusal on the unanswerable item, 7/7 answerable not wrongly
+  refused. The one citation miss (Q-003) is the known PR4 retrieval weakness a
+  real cross-encoder addresses — left visible, not hidden.
+
+### Buyer Team integration (next)
+
+The compiled graph is exposed as an MCP tool (`counsel.ask`, `counsel.brief`)
+so Buyer Team's Strands orchestrator calls it as one tool among its own. That
+PR adds the MCP server + FastAPI/WebSocket runtime around this graph.
 
 ## Layout
 
@@ -185,7 +232,7 @@ query --(decompose?)--> sub-queries --retrieve+merge--> --(rerank?)--> top_k
   deterministic offline proxy for CI (query-doc token interaction + a
   proportional phrase-adjacency bonus, scored without ever consulting golden
   spans). `CrossEncoderReranker` wraps bge-reranker-v2-m3 for production
-  (`uv sync --extra rerank`).
+  (`pip install -e ".[rerank]"`).
 - **Query decomposition.** Conditional by design — a query is split only when
   it names >= 2 known entities AND carries a comparison cue, so simple queries
   pass through untouched (tested). Multi-hop questions retrieve per-entity and
@@ -205,6 +252,53 @@ cross-encoder and an LLM decomposer are the implementations expected to win,
 and this same harness is how you confirm it locally. The proxies are
 deliberately NOT tuned toward the golden spans to manufacture an improvement.
 
+## The agent: LangGraph StateGraph
+
+The orchestration layer. A compiled `StateGraph` with conditional routing, a
+checkpointed human-gate, and a bounded verify/retry loop. Replaces the eval
+stub answerer and the PR3 lexical-refusal proxy with real graph logic.
+
+```bash
+python -m atlas_counsel.agent --q "who approves a $60,000 purchase?"
+python -m atlas_counsel.agent --q "policy on supplier gifts?" --decline
+```
+
+Flow:
+
+```
+plan -> retrieve -> validate
+validate --grounded--> synthesize        --insufficient--> human_gate
+synthesize -> verify
+verify --pass--> finalize -> END
+       --unfaithful & attempts<MAX--> synthesize   (bounded retry)
+       --unfaithful & exhausted--> human_gate
+human_gate --steer--> synthesize         --decline--> finalize(refuse)
+```
+
+- **Structured outputs / citation grounding.** `synthesize` emits a Pydantic
+  `DraftAnswer` whose every `Claim` carries a `span_id`; `verify` rejects any
+  claim citing a span that wasn't retrieved. A hallucinated citation is caught,
+  not shipped — proven by `test_hallucination_is_bounded_and_escalates`.
+- **Human-assisted decisions.** `human_gate` uses LangGraph `interrupt()`; the
+  run pauses, the caller resumes with `Command(resume=...)` to steer or
+  decline. State survives the pause via the checkpointer.
+- **Bounded loops.** The verify→synthesize retry is capped at `MAX_ATTEMPTS`,
+  then escalates — no unbounded LLM spinning.
+- **Provider abstraction.** `LLMProvider` protocol with an offline
+  `TemplateLLM` for CI (cites only retrieved spans, never fabricates) and real
+  Ollama/Bedrock injected locally. Checkpointer is injected too: MemorySaver
+  (dev) or Sqlite/Postgres (prod).
+- **Measured, not asserted.** Run over the golden set the agent matches the
+  stub: correct refusal on the unanswerable item, 7/7 answerable not wrongly
+  refused. The one citation miss (Q-003) is the known PR4 retrieval weakness a
+  real cross-encoder addresses — left visible, not hidden.
+
+### Buyer Team integration (next)
+
+The compiled graph is exposed as an MCP tool (`counsel.ask`, `counsel.brief`)
+so Buyer Team's Strands orchestrator calls it as one tool among its own. That
+PR adds the MCP server + FastAPI/WebSocket runtime around this graph.
+
 ## Layout
 
 ```
@@ -220,6 +314,7 @@ src/atlas_counsel/
   decompose.py     # conditional query decomposition
   pipeline.py      # composed decompose->retrieve->merge->rerank
   ablation.py      # CLI: measure each stage's effect
+  agent/           # LangGraph StateGraph: state, schemas, nodes, graph, llm
 tests/             # corpus + retrieval + (skipped) Qdrant integration
 docker-compose.yml # local Qdrant
 ```

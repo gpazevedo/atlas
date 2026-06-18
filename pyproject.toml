@@ -3,7 +3,7 @@ name = "atlas-counsel"
 version = "0.1.0"
 description = "Citation-grounded agentic RAG over a synthetic procurement corpus."
 requires-python = ">=3.11"
-dependencies = ["pydantic>=2.6"]
+dependencies = ["pydantic>=2.6", "langgraph>=1.0", "langgraph-checkpoint-sqlite>=2.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]

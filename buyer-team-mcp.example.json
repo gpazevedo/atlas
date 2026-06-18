@@ -1,0 +1,10 @@
+{
+  "// note": "Example MCP client entry for Buyer Team's orchestrator to call ATLAS Counsel.",
+  "mcpServers": {
+    "atlas-counsel": {
+      "command": "python",
+      "args": ["-m", "atlas_counsel.service.mcp_server"],
+      "description": "Procurement RAG: counsel_ask, counsel_resume, counsel_brief"
+    }
+  }
+}

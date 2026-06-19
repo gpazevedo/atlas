@@ -7,7 +7,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Install deps first (layer cache when deps don't change).
 COPY uv.lock pyproject.toml README.md ./
-RUN uv sync --extra service --extra qdrant --frozen --no-dev
+RUN uv sync --extra service --extra qdrant --extra otel --frozen --no-dev
 
 # Copy source.
 COPY src ./src

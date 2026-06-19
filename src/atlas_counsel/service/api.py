@@ -20,6 +20,7 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from ..telemetry import instrument_fastapi, shutdown as otel_shutdown
 from .core import AskResult, AskStatus, CounselService
 from .tenants import DEFAULT_TENANT
 
@@ -41,7 +42,12 @@ class ResumeRequest(BaseModel):
 def create_app(service: CounselService | None = None) -> FastAPI:
     service = service or CounselService()
     app = FastAPI(title="ATLAS Counsel", version="0.1.0")
+    instrument_fastapi(app)
     _mount_mcp(app, service)
+
+    @app.on_event("shutdown")
+    async def _shutdown() -> None:
+        otel_shutdown()
 
     @app.get("/health")
     def health() -> dict:

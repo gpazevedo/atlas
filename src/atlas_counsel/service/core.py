@@ -32,6 +32,7 @@ from ..corpus import build_corpus
 from ..decompose import QueryDecomposer
 from ..embeddings import HashingEmbedder
 from ..retrieval import InMemoryHybridRetriever, RetrievedChunk, Retriever
+from ..telemetry import get_tracer
 from .tenants import DEFAULT_TENANT, TenantRegistry
 
 logger = logging.getLogger(__name__)
@@ -121,32 +122,40 @@ class CounselService:
 
     def ask(self, question: str, thread_id: str | None = None,
             tenant_id: str = DEFAULT_TENANT) -> AskResult:
-        tenant = self._registry.get(tenant_id)
-        cfg = self._make_config(thread_id)
-        out = tenant.compiled_graph.invoke({"question": question}, cfg)
-        return self._interpret(out, cfg["configurable"]["thread_id"])
+        tracer = get_tracer()
+        with tracer.start_as_current_span("counsel.ask") as span:
+            span.set_attribute("tenant_id", tenant_id)
+            span.set_attribute("question_len", len(question))
+            tenant = self._registry.get(tenant_id)
+            cfg = self._make_config(thread_id)
+            span.set_attribute("thread_id", cfg["configurable"]["thread_id"])
+            out = tenant.compiled_graph.invoke({"question": question}, cfg)
+            return self._interpret(out, cfg["configurable"]["thread_id"])
 
     def resume(self, thread_id: str, action: str,
                guidance: str | None = None,
                tenant_id: str = DEFAULT_TENANT) -> AskResult:
         """Resume a paused run. action ∈ {"steer","decline"}."""
-        tenant = self._registry.get(tenant_id)
-        cfg = self._make_config(thread_id)
-        # Verify the thread exists in this tenant's DB. A stale or cross-tenant
-        # resume starts fresh and crashes on Command(resume=...) with no state.
-        snapshot = tenant.compiled_graph.get_state(cfg)
-        if snapshot is None or snapshot.values == {}:
-            return AskResult(
-                status=AskStatus.ERROR,
-                thread_id=thread_id,
-                answer="thread not found — it may belong to a different tenant "
-                       "or have expired",
-            )
-        payload = {"action": action}
-        if guidance is not None:
-            payload["guidance"] = guidance
-        out = tenant.compiled_graph.invoke(Command(resume=payload), cfg)
-        return self._interpret(out, cfg["configurable"]["thread_id"])
+        tracer = get_tracer()
+        with tracer.start_as_current_span("counsel.resume") as span:
+            span.set_attribute("tenant_id", tenant_id)
+            span.set_attribute("thread_id", thread_id)
+            span.set_attribute("action", action)
+            tenant = self._registry.get(tenant_id)
+            cfg = self._make_config(thread_id)
+            snapshot = tenant.compiled_graph.get_state(cfg)
+            if snapshot is None or snapshot.values == {}:
+                return AskResult(
+                    status=AskStatus.ERROR,
+                    thread_id=thread_id,
+                    answer="thread not found — it may belong to a different tenant "
+                           "or have expired",
+                )
+            payload = {"action": action}
+            if guidance is not None:
+                payload["guidance"] = guidance
+            out = tenant.compiled_graph.invoke(Command(resume=payload), cfg)
+            return self._interpret(out, cfg["configurable"]["thread_id"])
 
     async def astream(self, question: str, thread_id: str | None = None,
                       tenant_id: str = DEFAULT_TENANT):
@@ -158,18 +167,23 @@ class CounselService:
           {"event": "result", ...AskResult fields}            done
           {"event": "needs_input", ...}                       paused at gate
         """
-        tenant = self._registry.get(tenant_id)
-        cfg = self._make_config(thread_id)
-        for step in tenant.compiled_graph.stream(
-            {"question": question}, cfg, stream_mode="updates"
-        ):
-            for node_name in step:
-                if node_name != "__interrupt__":
-                    yield {"event": "node", "node": node_name}
-        tid = cfg["configurable"]["thread_id"]
-        result = self._result_from_snapshot(tenant.compiled_graph, cfg, tid)
-        event = "needs_input" if result.status == AskStatus.NEEDS_INPUT else "result"
-        yield {"event": event, **result.model_dump()}
+        tracer = get_tracer()
+        with tracer.start_as_current_span("counsel.astream") as span:
+            span.set_attribute("tenant_id", tenant_id)
+            span.set_attribute("question_len", len(question))
+            tenant = self._registry.get(tenant_id)
+            cfg = self._make_config(thread_id)
+            span.set_attribute("thread_id", cfg["configurable"]["thread_id"])
+            for step in tenant.compiled_graph.stream(
+                {"question": question}, cfg, stream_mode="updates"
+            ):
+                for node_name in step:
+                    if node_name != "__interrupt__":
+                        yield {"event": "node", "node": node_name}
+            tid = cfg["configurable"]["thread_id"]
+            result = self._result_from_snapshot(tenant.compiled_graph, cfg, tid)
+            event = "needs_input" if result.status == AskStatus.NEEDS_INPUT else "result"
+            yield {"event": event, **result.model_dump()}
 
     def deep_health(self) -> dict:
         """Health check that verifies real dependencies, not just liveness."""

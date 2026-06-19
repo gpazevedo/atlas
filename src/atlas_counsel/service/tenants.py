@@ -26,6 +26,7 @@ from ..corpus import build_corpus
 from ..decompose import HeuristicDecomposer, QueryDecomposer
 from ..embeddings import HashingEmbedder
 from ..retrieval import InMemoryHybridRetriever, Retriever
+from ..telemetry import get_tracer
 
 DEFAULT_TENANT = "default"
 _DEFAULT_CHECKPOINT_DIR = "data"
@@ -97,18 +98,20 @@ class TenantRegistry:
     # -- internal ---------------------------------------------------------
 
     def _create(self, tenant_id: str) -> Tenant:
-        tenant_dir = os.path.join(self._checkpoint_dir, tenant_id)
-        os.makedirs(tenant_dir, exist_ok=True)
-        db_path = os.path.join(tenant_dir, "checkpoints.db")
-        conn = sqlite3.connect(db_path, check_same_thread=False)
-        checkpointer = SqliteSaver(conn)
-
-        retriever = self._retriever or _default_retriever()
-        graph = build_counsel_graph(
-            retriever, llm=self._llm, decomposer=self._decomposer, checkpointer=checkpointer
-        )
-        logger.info("tenant %s: created (db=%s)", tenant_id, db_path)
-        return Tenant(tenant_id=tenant_id, checkpointer=checkpointer, compiled_graph=graph)
+        tracer = get_tracer()
+        with tracer.start_as_current_span("tenant.create") as span:
+            span.set_attribute("tenant_id", tenant_id)
+            tenant_dir = os.path.join(self._checkpoint_dir, tenant_id)
+            os.makedirs(tenant_dir, exist_ok=True)
+            db_path = os.path.join(tenant_dir, "checkpoints.db")
+            conn = sqlite3.connect(db_path, check_same_thread=False)
+            checkpointer = SqliteSaver(conn)
+            retriever = self._retriever or _default_retriever()
+            graph = build_counsel_graph(
+                retriever, llm=self._llm, decomposer=self._decomposer, checkpointer=checkpointer
+            )
+            logger.info("tenant %s: created (db=%s)", tenant_id, db_path)
+            return Tenant(tenant_id=tenant_id, checkpointer=checkpointer, compiled_graph=graph)
 
     @staticmethod
     def _validate(tenant_id: str) -> None:

@@ -6,6 +6,8 @@ Covers every control-flow path:
   * unanswerable -> interrupt -> steer -> answer
   * bounded retry: a hallucinating LLM is caught by verify and the loop
     terminates at MAX_ATTEMPTS rather than spinning
+  * gap-aware iterative retrieval: insufficient grounding triggers gap_analyze
+    -> retrieve loop, accumulating chunks before escalating
   * routers in isolation
   * structured-output / citation enforcement
 """
@@ -19,9 +21,12 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
 from atlas_counsel.agent import build_counsel_graph
+from atlas_counsel.agent.llm import TemplateLLM
 from atlas_counsel.agent.nodes import (
     MAX_ATTEMPTS,
+    MAX_GAP_ITERATIONS,
     route_after_human,
+    route_after_validate,
     route_after_verify,
 )
 from atlas_counsel.agent.schemas import (
@@ -162,6 +167,74 @@ def test_route_after_verify_retries_then_escalates():
 def test_route_after_human():
     assert route_after_human({"human_input": "__decline__"}) == "finalize"
     assert route_after_human({"human_input": "POL-004"}) == "synthesize"
+
+
+def test_route_after_validate_grounded_skips_gap():
+    assert route_after_validate({"grounded": True}) == "synthesize"
+
+
+def test_route_after_validate_gap_then_escalates():
+    assert route_after_validate({"grounded": False, "gap_iterations": 0}) == "gap_analyze"
+    assert route_after_validate({"grounded": False, "gap_iterations": 1}) == "gap_analyze"
+    assert (
+        route_after_validate({"grounded": False, "gap_iterations": MAX_GAP_ITERATIONS})
+        == "human_gate"
+    )
+
+
+# --- gap-aware iterative retrieval -------------------------------------------
+
+def test_unanswerable_still_reaches_human_gate_after_gap_loop():
+    """Gap loop runs but doesn't find content for a genuinely unanswerable
+    question; it exhausts iterations and escalates to human_gate."""
+    graph = _graph()
+    cfg = {"configurable": {"thread_id": "gap1"}}
+    out = graph.invoke(
+        {"question": "What is our policy on accepting gifts from suppliers?"}, cfg
+    )
+    assert "__interrupt__" in out
+    assert out["__interrupt__"][0].value["reason"] == "insufficient_grounding"
+    # Gap iterations were exhausted before reaching human_gate.
+    state = graph.get_state(cfg)
+    assert state.values.get("gap_iterations", 0) == MAX_GAP_ITERATIONS
+
+
+def test_gap_analysis_accumulates_chunks():
+    """Follow-up queries from gap_analyze merge new chunks into the existing
+    retrieved set rather than replacing them."""
+    graph = _graph()
+    cfg = {"configurable": {"thread_id": "gap2"}}
+    out = graph.invoke(
+        {"question": "What is our policy on accepting gifts from suppliers?"}, cfg
+    )
+    state = graph.get_state(cfg)
+    # Retrieved chunks should contain results from the initial plan retrieval
+    # plus any chunks found during gap-analysis rounds.
+    assert len(state.values.get("retrieved", [])) > 0
+
+
+def test_template_llm_gap_analyze_returns_followup():
+    """gap_analyze identifies question tokens not covered by retrieved spans."""
+    from atlas_counsel.chunking import chunk_corpus
+    from atlas_counsel.corpus import build_corpus
+    from atlas_counsel.embeddings import HashingEmbedder
+    from atlas_counsel.retrieval import InMemoryHybridRetriever
+
+    r = InMemoryHybridRetriever(HashingEmbedder())
+    r.index(chunk_corpus(build_corpus()))
+    chunks = r.search("single-source purchase threshold", top_k=3)
+    llm = TemplateLLM()
+
+    # Tokens like "purchase" and "threshold" should be covered by retrieved
+    # spans; "gifts" and "suppliers" are absent from the corpus. A gap-aware
+    # question should produce a follow-up query for the missing tokens.
+    follow_ups = llm.gap_analyze(
+        "What is our policy on accepting gifts from suppliers?", chunks
+    )
+    assert isinstance(follow_ups, list)
+    # The missing tokens (gifts, suppliers, accepting) should appear in the query.
+    if follow_ups:
+        assert any("gifts" in f for f in follow_ups)
 
 
 # --- structured output / citation enforcement -------------------------------

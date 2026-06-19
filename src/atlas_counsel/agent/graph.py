@@ -48,7 +48,9 @@ def build_counsel_graph(
     g.add_edge("retrieve", "validate")
 
     g.add_conditional_edges("validate", route_after_validate,
-                            {"synthesize": "synthesize", "human_gate": "human_gate"})
+                            {"synthesize": "synthesize", "gap_analyze": "gap_analyze",
+                             "human_gate": "human_gate"})
+    g.add_edge("gap_analyze", "retrieve")
     g.add_edge("synthesize", "verify")
     g.add_conditional_edges("verify", route_after_verify,
                             {"finalize": "finalize", "synthesize": "synthesize",

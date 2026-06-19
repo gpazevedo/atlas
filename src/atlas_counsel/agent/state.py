@@ -32,6 +32,9 @@ class CounselState(TypedDict, total=False):
     verdict: GroundingVerdict
     attempts: int           # synthesize attempts so far (bounds the retry loop)
 
+    # --- gap-aware retrieval ---
+    gap_iterations: int     # how many gap-analysis rounds completed
+
     # --- human-gate ---
     escalated: bool
     human_input: str | None  # guidance / decision provided on resume

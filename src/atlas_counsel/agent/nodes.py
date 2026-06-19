@@ -9,7 +9,8 @@ Control flow:
 
     plan -> retrieve -> validate
     validate --grounded--> synthesize
-             --insufficient--> human_gate
+             --insufficient & gap left--> gap_analyze -> retrieve   (iterative)
+             --insufficient & exhausted--> human_gate
     synthesize -> verify
     verify --pass--> finalize -> END
            --unfaithful & attempts left--> synthesize   (retry)
@@ -31,6 +32,7 @@ from ..retrieval import Retriever
 
 MAX_ATTEMPTS = 2
 GROUNDING_THRESHOLD = 0.25
+MAX_GAP_ITERATIONS = 2
 
 
 def make_nodes(
@@ -45,10 +47,14 @@ def make_nodes(
         q = state["question"]
         subs = decomposer.decompose(q) if decomposer else [q]
         return {"sub_queries": subs, "attempts": 0, "escalated": False,
-                "human_input": None}
+                "human_input": None, "gap_iterations": 0}
 
     def retrieve(state: CounselState) -> CounselState:
+        # Seed merge from any previously retrieved chunks so gap-analysis
+        # rounds accumulate rather than replace.
         merged: dict[str, object] = {}
+        for rc in state.get("retrieved", []):
+            merged[rc.chunk.span_id] = rc  # type: ignore[attr-defined, union-attr]
         for sub in state["sub_queries"]:
             for rc in retriever.search(sub, top_k=top_k):
                 cur = merged.get(rc.chunk.span_id)
@@ -73,6 +79,14 @@ def make_nodes(
     def verify(state: CounselState) -> CounselState:
         verdict = llm.verify(state["question"], state["draft"], state["retrieved"])
         return {"verdict": verdict}
+
+    def gap_analyze(state: CounselState) -> CounselState:
+        """Issue follow-up queries targeting information gaps in retrieved chunks."""
+        follow_ups = llm.gap_analyze(state["question"], state["retrieved"])
+        iterations = state.get("gap_iterations", 0) + 1
+        if follow_ups:
+            return {"sub_queries": follow_ups, "gap_iterations": iterations}
+        return {"sub_queries": [], "gap_iterations": iterations}
 
     def human_gate(state: CounselState) -> CounselState:
         # Pause the run and surface why. The caller resumes with a decision:
@@ -104,7 +118,7 @@ def make_nodes(
 
     return {
         "plan": plan, "retrieve": retrieve, "validate": validate,
-        "synthesize": synthesize, "verify": verify,
+        "gap_analyze": gap_analyze, "synthesize": synthesize, "verify": verify,
         "human_gate": human_gate, "finalize": finalize,
     }
 
@@ -112,7 +126,11 @@ def make_nodes(
 # --- routers ----------------------------------------------------------------
 
 def route_after_validate(state: CounselState) -> str:
-    return "synthesize" if state.get("grounded") else "human_gate"
+    if state.get("grounded"):
+        return "synthesize"
+    if state.get("gap_iterations", 0) < MAX_GAP_ITERATIONS:
+        return "gap_analyze"
+    return "human_gate"
 
 
 def route_after_verify(state: CounselState) -> str:

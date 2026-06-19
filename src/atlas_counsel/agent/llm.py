@@ -34,6 +34,10 @@ class LLMProvider(Protocol):
         self, question: str, draft: DraftAnswer, context: list[RetrievedChunk]
     ) -> GroundingVerdict: ...
 
+    def gap_analyze(
+        self, question: str, context: list[RetrievedChunk]
+    ) -> list[str]: ...
+
 
 class TemplateLLM:
     """Deterministic offline provider.
@@ -75,8 +79,6 @@ class TemplateLLM:
         retrieved_text = {c.chunk.span_id: c.chunk.text.strip() for c in context}
         unsupported: list[str] = []
         for claim in draft.claims:
-            # A claim is faithful iff its cited span was retrieved AND its text
-            # matches that span's text (no fabrication / drift).
             src = retrieved_text.get(claim.span_id)
             if src is None or claim.text.strip() not in src and src not in claim.text.strip():
                 unsupported.append(claim.span_id or "<no-citation>")
@@ -84,3 +86,26 @@ class TemplateLLM:
             faithful=not unsupported,
             unsupported_span_ids=unsupported,
         )
+
+    def gap_analyze(
+        self, question: str, context: list[RetrievedChunk]
+    ) -> list[str]:
+        """Return follow-up queries targeting question tokens not yet covered."""
+        from .._tokenize import STOPWORDS, content_tokens
+        _DOMAIN_STOP = {"policy", "purchase", "agreement"}
+        q_tokens = content_tokens(question, min_len=3, extra_stop=_DOMAIN_STOP)
+        if not q_tokens:
+            return []
+        ctx_tokens: set[str] = set()
+        for rc in context:
+            ctx_tokens |= {t for t in rc.chunk.tokens
+                           if t not in STOPWORDS | _DOMAIN_STOP and len(t) >= 3}
+            if rc.chunk.heading:
+                ctx_tokens |= content_tokens(rc.chunk.heading, min_len=3,
+                                             extra_stop=_DOMAIN_STOP)
+            ctx_tokens |= content_tokens(rc.chunk.title, min_len=3,
+                                         extra_stop=_DOMAIN_STOP)
+        missing = [t for t in q_tokens if t not in ctx_tokens]
+        if not missing:
+            return []
+        return [" ".join(missing)]

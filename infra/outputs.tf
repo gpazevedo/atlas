@@ -18,6 +18,11 @@ output "ecs_service" {
   value       = aws_ecs_service.app.name
 }
 
+output "github_deploy_role_arn" {
+  description = "ARN of the role GitHub Actions assumes via OIDC to deploy"
+  value       = aws_iam_role.github_deploy.arn
+}
+
 output "mcp_endpoint" {
   description = "MCP Streamable HTTP endpoint"
   value       = "http://${aws_lb.main.dns_name}/mcp"

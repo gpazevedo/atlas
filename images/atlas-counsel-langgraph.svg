@@ -78,6 +78,14 @@
     <text x="188" y="558" text-anchor="middle" class="tag">decision node</text>
   </g>
 
+  <!-- GAP ANALYZE -->
+  <g>
+    <rect x="96" y="600" width="184" height="74" rx="11" fill="#1a2433" stroke="#cf9b5b" stroke-width="1.2"/>
+    <text x="188" y="626" text-anchor="middle" class="node-t">gap_analyze</text>
+    <text x="188" y="646" text-anchor="middle" class="node-s">missing-topic tokens</text>
+    <text x="188" y="661" text-anchor="middle" class="tag">bounded re-retrieve · max 2</text>
+  </g>
+
   <!-- SYNTHESIZE -->
   <g>
     <rect x="420" y="356" width="196" height="86" rx="11" fill="#16243a" stroke="#34507a" stroke-width="1.3"/>
@@ -122,13 +130,20 @@
   <!-- retrieve -> validate -->
   <line x1="188" y1="442" x2="188" y2="476" stroke="#5b87c4" stroke-width="1.7" marker-end="url(#arrow)"/>
 
+  <!-- validate -> gap_analyze (insufficient, gap left) -->
+  <line x1="188" y1="566" x2="188" y2="596" stroke="#cf9b5b" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrowLoop)"/>
+  <text x="198" y="588" class="loop-l">insufficient</text>
+  <!-- gap_analyze -> retrieve (loop back up the left edge) -->
+  <path d="M96,632 C60,632 60,399 92,399" fill="none" stroke="#cf9b5b" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrowLoop)"/>
+  <text x="34" y="516" class="loop-l" transform="rotate(-90 34 516)">re-retrieve (max 2)</text>
+
   <!-- validate -> synthesize (grounded) -->
   <path d="M280,510 C340,510 360,399 416,399" fill="none" stroke="#5b87c4" stroke-width="1.7" marker-end="url(#arrow)"/>
   <text x="312" y="470" class="edge-l">grounded</text>
 
-  <!-- validate -> human-gate (insufficient -> escalate): drop down, run along bottom-free corridor up to gate -->
+  <!-- validate -> human-gate (insufficient & exhausted -> escalate) -->
   <path d="M281,496 C360,470 372,200 560,200 C620,200 650,224 700,242" fill="none" stroke="#b070b0" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrowGate)"/>
-  <text x="372" y="192" class="gate-l">insufficient → escalate</text>
+  <text x="372" y="192" class="gate-l">gap exhausted → escalate</text>
 
   <!-- synthesize -> verify -->
   <line x1="518" y1="442" x2="518" y2="476" stroke="#5b87c4" stroke-width="1.7" marker-end="url(#arrow)"/>
@@ -137,7 +152,7 @@
   <path d="M616,523 C636,523 642,523 656,523" fill="none" stroke="#5b87c4" stroke-width="1.7" marker-end="url(#arrow)"/>
   <text x="624" y="514" class="edge-l">pass</text>
 
-  <!-- verify -> synthesize (retry loop): route out the right edge, up, back into synthesize right edge -->
+  <!-- verify -> synthesize (retry loop) -->
   <path d="M616,520 C648,520 648,400 620,400" fill="none" stroke="#cf9b5b" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrowLoop)"/>
   <text x="628" y="464" class="loop-l">unfaithful</text>
   <text x="628" y="478" class="loop-l">→ retry</text>
@@ -155,13 +170,13 @@
   <text x="652" y="424" class="gate-l">exhausted</text>
 
   <!-- STATE + CHECKPOINTER strip inside graph -->
-  <rect x="96" y="600" width="732" height="86" rx="11" fill="#101a2b" stroke="#2c405d" stroke-width="1.2"/>
-  <text x="116" y="624" class="node-t" fill="#cfe0f2">CounselState</text>
-  <text x="252" y="624" class="tag">— typed dict threaded through every node, merged via reducers</text>
-  <text x="116" y="648" class="code">question · sub_queries[] · retrieved[] · grounded · draft · verdict · attempts · escalated · human_input · answer</text>
-  <text x="116" y="672" class="code">checkpointer = </text>
-  <text x="232" y="672" class="code" fill="#7fae9a">SqliteSaver (default) · MemorySaver (dev CLI)</text>
-  <text x="530" y="672" class="tag">— per-thread state · interrupt + resume · time-travel</text>
+  <rect x="324" y="600" width="504" height="100" rx="11" fill="#101a2b" stroke="#2c405d" stroke-width="1.2"/>
+  <text x="344" y="622" class="node-t" fill="#cfe0f2">CounselState</text>
+  <text x="468" y="622" class="tag">— typed dict threaded through every node, merged via reducers</text>
+  <text x="344" y="644" class="code">question · sub_queries[] · retrieved[] · grounded · draft · verdict</text>
+  <text x="344" y="660" class="code">attempts · gap_iterations · escalated · human_input · answer</text>
+  <text x="344" y="684" class="code">checkpointer = </text>
+  <text x="460" y="684" class="code" fill="#7fae9a">SqliteSaver (default) · MemorySaver (dev CLI)</text>
 
   <!-- ============ RIGHT: MCP INTEGRATION ============ -->
   <text x="892" y="126" class="lane" fill="#a9d8c9">INTEGRATION  ·  BUYER TEAM</text>
@@ -229,21 +244,21 @@
   <text x="100" y="794" class="legend">normal edge</text>
 
   <line x1="220" y1="790" x2="256" y2="790" stroke="#cf9b5b" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrowLoop)"/>
-  <text x="264" y="794" class="legend">retry loop (bounded by attempts)</text>
+  <text x="264" y="794" class="legend">bounded loop (gap re-retrieve / verify retry)</text>
 
-  <line x1="480" y1="790" x2="516" y2="790" stroke="#b070b0" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrowGate)"/>
-  <text x="524" y="794" class="legend">human-gate path (interrupt / resume)</text>
+  <line x1="540" y1="790" x2="576" y2="790" stroke="#b070b0" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#arrowGate)"/>
+  <text x="584" y="794" class="legend">human-gate path (interrupt / resume)</text>
 
-  <line x1="760" y1="790" x2="796" y2="790" stroke="#5fae9a" stroke-width="1.7" marker-end="url(#arrowMcp)"/>
-  <text x="804" y="794" class="legend">MCP / runtime boundary</text>
+  <line x1="820" y1="790" x2="856" y2="790" stroke="#5fae9a" stroke-width="1.7" marker-end="url(#arrowMcp)"/>
+  <text x="864" y="794" class="legend">MCP / runtime boundary</text>
 
-  <rect x="980" y="782" width="16" height="16" rx="4" fill="#1a2433" stroke="#cf9b5b" stroke-width="1.4"/>
-  <text x="1004" y="794" class="legend">conditional decision node</text>
+  <rect x="1040" y="782" width="16" height="16" rx="4" fill="#1a2433" stroke="#cf9b5b" stroke-width="1.4"/>
+  <text x="1064" y="794" class="legend">conditional decision node</text>
 
   <!-- maps-to-JD footnote -->
   <text x="56" y="834" class="tag" fill="#6f8aa8">plan / execution / validation / human-assisted decision-making  ·  reliable tool-calling  ·  long-running state + checkpointing  ·  structured outputs  ·  this whole graph = one tool to Buyer Team</text>
 
   <!-- status -->
-  <text x="56" y="870" class="subtitle" fill="#7d92ad">IMPLEMENTED · AGENT + MCP / FASTAPI RUNTIME · RESILIENT · 63 TESTS</text>
-  <text x="1312" y="898" text-anchor="end" class="legend" fill="#6f8aa8">63 tests passing · measured by the eval harness</text>
+  <text x="56" y="870" class="subtitle" fill="#7d92ad">IMPLEMENTED · AGENT + MCP / FASTAPI RUNTIME · RESILIENT · 88 TESTS</text>
+  <text x="1312" y="898" text-anchor="end" class="legend" fill="#6f8aa8">88 tests passing · measured by the eval harness</text>
 </svg>

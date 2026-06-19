@@ -42,7 +42,7 @@ def build_mcp_server(service: CounselService | None = None):
 
     @mcp.tool()
     def counsel_ask(tenant_id: str, question: str) -> dict:
-        """Answer a procurement-policy or contract question with citations.
+        """Answer a policy or contract question with citations.
 
         tenant_id identifies the organization (e.g. 'acme', 'buyer-team').
         Returns a dict with status (answered | refused | needs_input), the

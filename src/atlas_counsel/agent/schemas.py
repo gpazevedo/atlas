@@ -34,7 +34,7 @@ class GroundingVerdict(BaseModel):
 
 
 _REFUSAL_TEXT = (
-    "I cannot answer this from the available procurement documents; "
+    "I cannot answer this from the available documents; "
     "the information is not covered by the corpus."
 )
 _REFUSAL_NO_HITL_TEXT = "I don't know how to answer this question."

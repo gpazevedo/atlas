@@ -29,7 +29,7 @@ class Answer(BaseModel):
 
 
 REFUSAL_TEXT = (
-    "I cannot answer this from the available procurement documents; the "
+    "I cannot answer this from the available documents; the "
     "information is not covered by the corpus."
 )
 

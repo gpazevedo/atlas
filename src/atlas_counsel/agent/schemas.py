@@ -33,6 +33,13 @@ class GroundingVerdict(BaseModel):
     unsupported_span_ids: list[str] = Field(default_factory=list)
 
 
+_REFUSAL_TEXT = (
+    "I cannot answer this from the available procurement documents; "
+    "the information is not covered by the corpus."
+)
+_REFUSAL_NO_HITL_TEXT = "I don't know how to answer this question."
+
+
 class CounselAnswer(BaseModel):
     """The agent's final, user-facing result."""
 
@@ -53,9 +60,10 @@ class CounselAnswer(BaseModel):
                    attempts=attempts, escalated=escalated)
 
     @classmethod
-    def refusal(cls, *, attempts: int, escalated: bool) -> "CounselAnswer":
-        return cls(
-            text="I cannot answer this from the available procurement documents; "
-                 "the information is not covered by the corpus.",
-            citations=[], refused=True, attempts=attempts, escalated=escalated,
+    def refusal(cls, *, attempts: int, escalated: bool,
+                no_hitl: bool = False) -> "CounselAnswer":
+        text = (
+            _REFUSAL_NO_HITL_TEXT if no_hitl else _REFUSAL_TEXT
         )
+        return cls(text=text, citations=[], refused=True,
+                   attempts=attempts, escalated=escalated)

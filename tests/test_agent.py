@@ -253,3 +253,51 @@ def test_counsel_answer_assembles_citations():
     ans = CounselAnswer.from_claims(draft, attempts=1, escalated=False)
     assert ans.citations == ["POL-001#S1", "POL-003#S0"]
     assert "POL-001#S1" in ans.text
+
+
+# --- HITL disabled ---------------------------------------------------------
+
+def test_route_after_validate_no_hitl_skips_gate():
+    """When HITL is disabled and gap is exhausted, skip human_gate and refuse."""
+    assert route_after_validate(
+        {"grounded": False, "gap_iterations": MAX_GAP_ITERATIONS, "hitl_enabled": False}
+    ) == "finalize"
+
+
+def test_route_after_verify_no_hitl_skips_gate():
+    """When HITL is disabled and retries exhausted, skip human_gate and refuse."""
+    assert route_after_verify(
+        {"verdict": GroundingVerdict(faithful=False), "attempts": MAX_ATTEMPTS,
+         "hitl_enabled": False}
+    ) == "finalize"
+
+
+def test_no_hitl_refuses_instead_of_interrupting():
+    """With HITL disabled, an unanswerable question is refused directly instead
+    of pausing at the human-gate."""
+    graph = build_counsel_graph(
+        _retriever(), checkpointer=MemorySaver(), hitl_enabled=False,
+    )
+    cfg = {"configurable": {"thread_id": "nohitl1"}}
+    out = graph.invoke(
+        {"question": "What is our policy on accepting gifts from suppliers?"}, cfg,
+    )
+    assert "__interrupt__" not in out
+    ans = out["answer"]
+    assert ans.refused
+    assert "don't know how to answer" in ans.text
+
+
+def test_no_hitl_grounded_still_answers():
+    """With HITL disabled, a grounded question should still answer normally."""
+    graph = build_counsel_graph(
+        _retriever(), checkpointer=MemorySaver(), hitl_enabled=False,
+    )
+    cfg = {"configurable": {"thread_id": "nohitl2"}}
+    out = graph.invoke(
+        {"question": "Above what value does a single-source purchase need justification?"},
+        cfg,
+    )
+    ans = out["answer"]
+    assert not ans.refused
+    assert "POL-001#S1" in ans.citations

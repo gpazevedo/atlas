@@ -1,6 +1,6 @@
 """Run the ATLAS Counsel agent interactively (offline providers).
 
-    python -m atlas_counsel.agent --q "who approves a \$60,000 purchase?"
+    python -m atlas_counsel.agent --q "who approves a $60,000 purchase?"
 
 At a human-gate the run pauses; pass --decline or --steer DOC to resume.
 """
@@ -23,13 +23,16 @@ def main() -> None:
     warnings.filterwarnings("ignore")
     ap = argparse.ArgumentParser()
     ap.add_argument("--q", required=True, help="question")
+    ap.add_argument("--no-hitl", action="store_true",
+                    help="disable human-in-the-loop; refuse instead of pausing")
     ap.add_argument("--decline", action="store_true", help="auto-decline at gate")
     ap.add_argument("--steer", default=None, help="doc hint to steer toward at gate")
     args = ap.parse_args()
 
     r = InMemoryHybridRetriever(HashingEmbedder())
     r.index(chunk_corpus(build_corpus()))
-    graph = build_counsel_graph(r, checkpointer=MemorySaver())
+    graph = build_counsel_graph(r, checkpointer=MemorySaver(),
+                                hitl_enabled=not args.no_hitl)
     cfg = {"configurable": {"thread_id": "cli"}}
 
     out = graph.invoke({"question": args.q}, cfg)

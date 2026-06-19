@@ -53,6 +53,7 @@ class TenantRegistry:
         llm: LLMProvider | None = None,
         decomposer: QueryDecomposer | None = None,
         checkpoint_dir: str | None = None,
+        hitl_enabled: bool = True,
     ) -> None:
         self._retriever = retriever
         self._llm = llm or TemplateLLM()
@@ -60,6 +61,7 @@ class TenantRegistry:
         self._checkpoint_dir = checkpoint_dir or os.environ.get(
             "CHECKPOINT_DIR", _DEFAULT_CHECKPOINT_DIR
         )
+        self._hitl_enabled = hitl_enabled
         self._tenants: dict[str, Tenant] = {}
         self._lock = threading.Lock()
 
@@ -108,7 +110,8 @@ class TenantRegistry:
             checkpointer = SqliteSaver(conn)
             retriever = self._retriever or _default_retriever()
             graph = build_counsel_graph(
-                retriever, llm=self._llm, decomposer=self._decomposer, checkpointer=checkpointer
+                retriever, llm=self._llm, decomposer=self._decomposer,
+                checkpointer=checkpointer, hitl_enabled=self._hitl_enabled,
             )
             logger.info("tenant %s: created (db=%s)", tenant_id, db_path)
             return Tenant(tenant_id=tenant_id, checkpointer=checkpointer, compiled_graph=graph)

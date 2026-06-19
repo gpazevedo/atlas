@@ -36,6 +36,7 @@ class CounselState(TypedDict, total=False):
     gap_iterations: int     # how many gap-analysis rounds completed
 
     # --- human-gate ---
+    hitl_enabled: bool       # if False, skip the gate and refuse instead
     escalated: bool
     human_input: str | None  # guidance / decision provided on resume
 

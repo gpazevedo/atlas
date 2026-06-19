@@ -106,6 +106,7 @@ class CounselService:
         checkpointer=None,  # deprecated; retained for test compat
         checkpoint_db: str | None = None,
         recursion_limit: int = DEFAULT_RECURSION_LIMIT,
+        hitl_enabled: bool = True,
     ) -> None:
         if retriever is None:
             retriever = _default_retriever()
@@ -114,6 +115,7 @@ class CounselService:
             retriever = FallbackRetriever(primary=retriever, fallback=fallback)
         self._registry = TenantRegistry(
             retriever=retriever, llm=llm, decomposer=decomposer,
+            hitl_enabled=hitl_enabled,
         )
         self._recursion_limit = recursion_limit
         self._ready = True

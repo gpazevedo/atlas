@@ -28,16 +28,21 @@ def build_counsel_graph(
     decomposer: QueryDecomposer | None = None,
     checkpointer=None,
     top_k: int = 5,
+    hitl_enabled: bool = True,
 ):
     """Compile the ATLAS Counsel agent graph.
 
     checkpointer: any LangGraph checkpointer. If None, the graph still compiles
     but interrupt/resume needs one — callers that use the human-gate must pass
     e.g. MemorySaver() (dev) or a Sqlite/Postgres saver (prod).
+
+    hitl_enabled: when False, the agent refuses instead of pausing at the
+    human-gate. Use for unattended / automated deployments.
     """
     llm = llm or TemplateLLM()
     decomposer = decomposer if decomposer is not None else HeuristicDecomposer()
-    nodes = make_nodes(retriever, llm, decomposer, top_k=top_k)
+    nodes = make_nodes(retriever, llm, decomposer, top_k=top_k,
+                       hitl_enabled=hitl_enabled)
 
     g = StateGraph(CounselState)
     for name, fn in nodes.items():
@@ -49,7 +54,7 @@ def build_counsel_graph(
 
     g.add_conditional_edges("validate", route_after_validate,
                             {"synthesize": "synthesize", "gap_analyze": "gap_analyze",
-                             "human_gate": "human_gate"})
+                             "human_gate": "human_gate", "finalize": "finalize"})
     g.add_edge("gap_analyze", "retrieve")
     g.add_edge("synthesize", "verify")
     g.add_conditional_edges("verify", route_after_verify,

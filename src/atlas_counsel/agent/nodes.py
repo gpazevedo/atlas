@@ -40,6 +40,8 @@ def make_nodes(
     llm: LLMProvider,
     decomposer: QueryDecomposer | None,
     top_k: int = 5,
+    *,
+    hitl_enabled: bool = True,
 ):
     """Build the node callables closed over the injected dependencies."""
 
@@ -47,7 +49,8 @@ def make_nodes(
         q = state["question"]
         subs = decomposer.decompose(q) if decomposer else [q]
         return {"sub_queries": subs, "attempts": 0, "escalated": False,
-                "human_input": None, "gap_iterations": 0}
+                "human_input": None, "gap_iterations": 0,
+                "hitl_enabled": hitl_enabled}
 
     def retrieve(state: CounselState) -> CounselState:
         # Seed merge from any previously retrieved chunks so gap-analysis
@@ -111,8 +114,10 @@ def make_nodes(
         # original automated grounding verdict — the human chose to proceed.
         steered = escalated and human_input not in (None, "__decline__")
         ungrounded = not state.get("grounded", True) and not steered
+        no_hitl = not state.get("hitl_enabled", True)
         if declined or ungrounded:
-            return {"answer": CounselAnswer.refusal(attempts=attempts, escalated=escalated)}
+            return {"answer": CounselAnswer.refusal(
+                attempts=attempts, escalated=escalated, no_hitl=no_hitl)}
         return {"answer": CounselAnswer.from_claims(
             state["draft"], attempts=attempts, escalated=escalated)}
 
@@ -130,6 +135,8 @@ def route_after_validate(state: CounselState) -> str:
         return "synthesize"
     if state.get("gap_iterations", 0) < MAX_GAP_ITERATIONS:
         return "gap_analyze"
+    if not state.get("hitl_enabled", True):
+        return "finalize"         # HITL disabled — refuse instead of escalating
     return "human_gate"
 
 
@@ -137,8 +144,10 @@ def route_after_verify(state: CounselState) -> str:
     if state["verdict"].faithful:
         return "finalize"
     if state.get("attempts", 0) >= MAX_ATTEMPTS:
-        return "human_gate"      # exhausted retries -> escalate
-    return "synthesize"          # bounded retry
+        if not state.get("hitl_enabled", True):
+            return "finalize"     # HITL disabled — refuse instead of escalating
+        return "human_gate"       # exhausted retries -> escalate
+    return "synthesize"           # bounded retry
 
 
 def route_after_human(state: CounselState) -> str:

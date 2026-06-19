@@ -11,6 +11,8 @@ This first slice ships the **corpus generator + golden eval set** plus a
 ## Quickstart
 
 ```bash
+264
+
 uv sync --extra dev
 atlas-corpus                          # generate the corpus
 uv run pytest                         # 44 tests, no external services

@@ -236,5 +236,5 @@
   <line x1="690" y1="815" x2="724" y2="815" stroke="#cf9b5b" stroke-width="1.4" stroke-dasharray="5 4"/>
   <text x="732" y="820" class="legend">eval observes the live pipeline</text>
 
-  <text x="1224" y="852" text-anchor="end" class="legend" fill="#6f8aa8">63 tests passing · offline-reproducible · public-safe corpus</text>
+  <text x="1224" y="852" text-anchor="end" class="legend" fill="#6f8aa8">88 tests passing · offline-reproducible · public-safe corpus</text>
 </svg>

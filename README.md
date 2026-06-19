@@ -11,15 +11,13 @@ This first slice ships the **corpus generator + golden eval set** plus a
 ## Quickstart
 
 ```bash
-264
-
 uv sync --extra dev
 atlas-corpus                          # generate the corpus
-uv run pytest                         # 44 tests, no external services
+uv run pytest                         # 83 tests, no external services
 
 # full suite (service + Qdrant resilience):
 uv sync --extra dev --extra service --extra qdrant
-uv run pytest                         # 69 tests
+uv run pytest                         # 85 tests
 
 # hybrid retrieval, offline (in-memory, no Qdrant):
 uv run python -m atlas_counsel.ingest --dry-run
@@ -82,7 +80,7 @@ Measured before any agent exists, so every later change is regression-checked.
 ```bash
 uv run python -m atlas_counsel.eval        # aggregate + per-tag breakdown
 uv run python -m atlas_counsel.eval --ab   # A/B two embedding configs
-```
+uv run python -m atlas_counsel.eval --meta # judge bias report
 
 - **Retrieval metrics** (no LLM, exact): hit@k, context recall, context
   precision (AP-style), MRR — scored against the golden set's known
@@ -101,6 +99,10 @@ uv run python -m atlas_counsel.eval --ab   # A/B two embedding configs
   harness's native output — the artifact the provider abstraction exists for.
 - **Langfuse** export is optional (`uv sync --extra langfuse`, set
   `LANGFUSE_*` env); a silent no-op otherwise so CI never depends on it.
+- **Meta-evaluation** (`--meta`) detects judge bias without an external LLM:
+  perturbation-based fluency and confidence-formatting bias tests, plus
+  Spearman-rank retrieval-judge correlation. `HeuristicJudge` serves as the
+  ~zero-delta baseline; a real LLM judge would reveal actual bias.
 - A **regression gate** (`tests/test_eval.py`) locks in current aggregate
   quality so future changes fail loudly instead of degrading silently.
 
@@ -153,7 +155,9 @@ Flow:
 
 ```text
 plan -> retrieve -> validate
-validate --grounded--> synthesize        --insufficient--> human_gate
+validate --grounded--> synthesize        --insufficient--> gap_analyze
+gap_analyze -> retrieve                  (bounded re-retrieval, max 2)
+validate --insufficient & exhausted--> human_gate
 synthesize -> verify
 verify --pass--> finalize -> END
        --unfaithful & attempts<MAX--> synthesize   (bounded retry)
@@ -168,6 +172,11 @@ human_gate --steer--> synthesize         --decline--> finalize(refuse)
 - **Human-assisted decisions.** `human_gate` uses LangGraph `interrupt()`; the
   run pauses, the caller resumes with `Command(resume=...)` to steer or
   decline. State survives the pause via the checkpointer.
+- **Gap-aware iterative retrieval.** When validation finds insufficient context,
+  a `gap_analyze` step extracts missing-topic tokens and re-retrieves (bounded at
+  `MAX_GAP_ITERATIONS=2`). Retrieved chunks accumulate across iterations so no
+  evidence is discarded. Only when the gap loop is exhausted does the agent
+  escalate to the human gate.
 - **Bounded loops.** The verify→synthesize retry is capped at `MAX_ATTEMPTS`,
   then escalates — no unbounded LLM spinning.
 - **Provider abstraction.** `LLMProvider` protocol with an offline
@@ -226,7 +235,7 @@ is not set — CI never depends on it. When configured, exports OTLP traces via 
 **Env vars:**
 
 | Variable | Purpose | Default |
-|----------|---------|---------|
+| ---------- | --------- | --------- |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint | (disabled) |
 | `OTEL_SERVICE_NAME` | Service name in traces | `atlas-counsel` |
 
@@ -288,12 +297,12 @@ src/atlas_counsel/
   retrieval.py         # Retriever protocol, RRF fusion, in-memory hybrid
   qdrant_store.py      # production Qdrant hybrid retriever (retry + timeout)
   ingest.py            # CLI: build -> chunk -> index
-  eval/                # metrics, judge protocol, runner, A/B report, Langfuse
+  eval/                # metrics, judge protocol, runner, A/B, meta-eval, Langfuse
   rerank.py            # Reranker protocol + offline proxy + cross-encoder
   decompose.py         # conditional query decomposition
   pipeline.py          # composed decompose->retrieve->merge->rerank
   ablation.py          # CLI: measure each stage's effect
-  agent/               # LangGraph StateGraph: state, nodes, graph, llm
+  agent/               # LangGraph StateGraph: state, nodes (incl. gap_analyze), graph, llm
   service/
     api.py             # FastAPI REST + WebSocket + mounted MCP
     core.py            # CounselService (transport-agnostic)

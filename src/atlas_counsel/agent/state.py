@@ -17,9 +17,14 @@ from ..retrieval import RetrievedChunk
 class CounselState(TypedDict, total=False):
     # --- inputs ---
     question: str
+    tenant_id: str            # set by caller; used by memory nodes
+    thread_id: str            # set by caller; used by memory nodes
 
     # --- plan ---
     sub_queries: list[str]
+
+    # --- memory ---
+    memory_context: str       # relevant facts + episode summaries + skills
 
     # --- retrieve ---
     retrieved: list[RetrievedChunk]

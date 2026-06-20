@@ -35,7 +35,9 @@ def main() -> None:
                                 hitl_enabled=not args.no_hitl)
     cfg = {"configurable": {"thread_id": "cli"}}
 
-    out = graph.invoke({"question": args.q}, cfg)
+    out = graph.invoke(
+        {"question": args.q, "tenant_id": "default", "thread_id": "cli"}, cfg,
+    )
     if "__interrupt__" in out:
         reason = out["__interrupt__"][0].value["reason"]
         print(f"[human-gate] paused: {reason}")

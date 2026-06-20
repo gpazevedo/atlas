@@ -8,13 +8,13 @@ and pauses for a human when it isn't sure — exposed to a separate platform
 
 It is built to be *measured*: an evaluation harness existed before the agent did,
 so every change is regression-checked rather than asserted. The whole thing runs
-offline and reproducibly in CI (`88` tests, no external services), then swaps to
+offline and reproducibly in CI (`114` tests, no external services), then swaps to
 real models and Qdrant in production via config, not code changes.
 
 ```bash
 uv sync --extra dev
 atlas-corpus                  # generate the corpus
-uv run pytest                 # 87 tests offline (Qdrant integration test skips)
+uv run pytest                 # 113 tests offline (Qdrant integration test skips)
 uv run python -m atlas_counsel.agent --q "who approves a $60,000 purchase?"
 ```
 
@@ -171,6 +171,46 @@ uv run python -m atlas_counsel.agent --q "policy on supplier gifts?" --decline
 
 ---
 
+## Multi-tier memory
+
+The agent remembers across sessions through three memory tiers, each with a
+distinct access pattern:
+
+| Tier       | What it stores                              | Write trigger          | Retrieval                        |
+|------------|---------------------------------------------|------------------------|----------------------------------|
+| Semantic   | Facts as NL strings                         | After every answer     | Embedding similarity on question |
+| Episodic   | One rolling summary per thread              | After every answer     | Embedding similarity on question |
+| Procedural | Learned prompt fragments + `when_to_use` cue | After every answer     | JIT similarity on `when_to_use`  |
+
+Memory is loaded before plan (`load_memory` node) and persisted after finalize
+(`save_memory` node). The `memory_context` string — relevant facts, past thread
+summaries, and matching skills — is injected into the synthesis prompt so the
+LLM has continuity across conversations.
+
+```text
+START → load_memory → plan → retrieve → validate → ... → finalize → save_memory → END
+```
+
+Two storage backends implement the same `MemoryStore` protocol:
+
+- **`InMemoryMemoryStore`** — dict-based, uses the existing `EmbeddingProvider`
+  for similarity. Deterministic, dependency-free, used in CI.
+- **`SqliteMemoryStore`** — SQLite with JSON-serialized embeddings, per-tenant
+  database at `data/{tenant_id}/memory.db`. Cosine similarity at query time.
+
+**Per-tenant isolation.** Each tenant's memories are physically separate — two
+tenants never see each other's facts, episode summaries, or skills.
+
+**Offline reflection.** `TemplateLLM.reflect()` extracts semantic facts from
+answer sentences heuristically and builds a short episodic summary. Real LLM
+providers override this with structured-output prompting for richer extraction.
+
+```bash
+uv run pytest tests/test_memory.py -v   # 22 tests covering all three tiers
+```
+
+---
+
 ## Evaluation harness
 
 Measured *before* the agent existed, so every later change is regression-checked.
@@ -266,11 +306,11 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
 ## Running the full suite
 
 ```bash
-# offline (87 tests; the Qdrant integration test skips without a server)
+# offline (113 tests; the Qdrant integration test skips without a server)
 uv sync --extra dev
 uv run pytest
 
-# full suite (88 tests) — needs the service + qdrant extras
+# full suite (114 tests) — needs the service + qdrant extras
 uv sync --extra dev --extra service --extra qdrant
 uv run pytest
 
@@ -316,7 +356,9 @@ src/atlas_counsel/
   decompose.py       # conditional query decomposition
   pipeline.py        # composed decompose -> retrieve -> merge -> rerank
   ablation.py        # CLI: measure each stage's effect
-  agent/             # LangGraph StateGraph: state, nodes (incl. gap_analyze), graph, llm
+  agent/             # LangGraph StateGraph: state, nodes (incl. memory), graph, llm
+  memory/            # multi-tier memory: semantic, episodic, procedural
+    store.py         # MemoryStore protocol + InMemory + Sqlite backends
   service/
     api.py           # FastAPI REST + WebSocket + mounted MCP
     core.py          # CounselService (transport-agnostic)

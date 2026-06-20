@@ -30,7 +30,7 @@ from ..agent.llm import LLMProvider
 from ..chunking import chunk_corpus
 from ..corpus import build_corpus
 from ..decompose import QueryDecomposer
-from ..embeddings import HashingEmbedder
+from ..embeddings import EmbeddingProvider, HashingEmbedder
 from ..retrieval import InMemoryHybridRetriever, RetrievedChunk, Retriever
 from ..telemetry import get_tracer
 from .tenants import DEFAULT_TENANT, TenantRegistry
@@ -107,6 +107,7 @@ class CounselService:
         checkpoint_db: str | None = None,
         recursion_limit: int = DEFAULT_RECURSION_LIMIT,
         hitl_enabled: bool = True,
+        embedder: EmbeddingProvider | None = None,
     ) -> None:
         if retriever is None:
             retriever = _default_retriever()
@@ -115,7 +116,7 @@ class CounselService:
             retriever = FallbackRetriever(primary=retriever, fallback=fallback)
         self._registry = TenantRegistry(
             retriever=retriever, llm=llm, decomposer=decomposer,
-            hitl_enabled=hitl_enabled,
+            hitl_enabled=hitl_enabled, embedder=embedder,
         )
         self._recursion_limit = recursion_limit
         self._ready = True
@@ -131,8 +132,11 @@ class CounselService:
             tenant = self._registry.get(tenant_id)
             cfg = self._make_config(thread_id)
             span.set_attribute("thread_id", cfg["configurable"]["thread_id"])
-            out = tenant.compiled_graph.invoke({"question": question}, cfg)
-            return self._interpret(out, cfg["configurable"]["thread_id"])
+            tid = cfg["configurable"]["thread_id"]
+            out = tenant.compiled_graph.invoke(
+                {"question": question, "tenant_id": tenant_id, "thread_id": tid}, cfg,
+            )
+            return self._interpret(out, tid)
 
     def resume(self, thread_id: str, action: str,
                guidance: str | None = None,
@@ -176,8 +180,10 @@ class CounselService:
             tenant = self._registry.get(tenant_id)
             cfg = self._make_config(thread_id)
             span.set_attribute("thread_id", cfg["configurable"]["thread_id"])
+            tid = cfg["configurable"]["thread_id"]
             for step in tenant.compiled_graph.stream(
-                {"question": question}, cfg, stream_mode="updates"
+                {"question": question, "tenant_id": tenant_id, "thread_id": tid},
+                cfg, stream_mode="updates",
             ):
                 for node_name in step:
                     if node_name != "__interrupt__":

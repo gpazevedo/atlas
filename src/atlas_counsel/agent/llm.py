@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 from .schemas import DraftAnswer, GroundingVerdict
+from ..memory.store import ProceduralSkill, ReflectionResult
 from ..retrieval import RetrievedChunk
 
 
@@ -37,6 +38,10 @@ class LLMProvider(Protocol):
     def gap_analyze(
         self, question: str, context: list[RetrievedChunk]
     ) -> list[str]: ...
+
+    def reflect(
+        self, question: str, answer_text: str, thread_id: str
+    ) -> ReflectionResult: ...
 
 
 class TemplateLLM:
@@ -109,3 +114,29 @@ class TemplateLLM:
         if not missing:
             return []
         return [" ".join(missing)]
+
+    def reflect(
+        self, question: str, answer_text: str, thread_id: str
+    ) -> ReflectionResult:
+        """Deterministic heuristic reflection.
+
+        Extracts answer sentences as semantic facts, builds a simple episodic
+        summary from question + answer, and returns no skills (conservative).
+        Real LLM providers override this with structured-output prompting.
+        """
+        # Semantic facts: split answer on sentence boundaries, keep non-trivial
+        facts: list[str] = []
+        for part in answer_text.replace("! ", ". ").replace("? ", ". ").split(". "):
+            clean = part.strip().rstrip(".")
+            if clean and len(clean.split()) >= 4:
+                facts.append(clean + ".")
+        # Episodic summary: short concatenation
+        summary = (
+            f"Q: {question[:200]} | "
+            f"A: {answer_text[:200]}{'...' if len(answer_text) > 200 else ''}"
+        )
+        return ReflectionResult(
+            semantic_facts=facts,
+            episodic_summary=summary,
+            skills=[],
+        )

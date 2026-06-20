@@ -28,6 +28,7 @@ from .schemas import CounselAnswer
 from .state import CounselState
 from ..decompose import QueryDecomposer
 from ..eval.answerer import grounding_overlap
+from ..memory.store import MemoryStore
 from ..retrieval import Retriever
 
 MAX_ATTEMPTS = 2
@@ -42,6 +43,7 @@ def make_nodes(
     top_k: int = 5,
     *,
     hitl_enabled: bool = True,
+    memory_store: MemoryStore | None = None,
 ):
     """Build the node callables closed over the injected dependencies."""
 
@@ -74,8 +76,17 @@ def make_nodes(
         return {"grounded": overlap >= GROUNDING_THRESHOLD}
 
     def synthesize(state: CounselState) -> CounselState:
+        question = state["question"]
+        memory = state.get("memory_context", "")
+        if memory:
+            question = (
+                f"[Relevant context from past interactions]\n"
+                f"{memory}\n\n"
+                f"[Current question]\n"
+                f"{state['question']}"
+            )
         draft = llm.synthesize(
-            state["question"], state["retrieved"], state.get("human_input")
+            question, state["retrieved"], state.get("human_input")
         )
         return {"draft": draft, "attempts": state.get("attempts", 0) + 1}
 
@@ -121,11 +132,61 @@ def make_nodes(
         return {"answer": CounselAnswer.from_claims(
             state["draft"], attempts=attempts, escalated=escalated)}
 
-    return {
+    # -- memory nodes (only when memory_store is injected) -----------------
+
+    def load_memory(state: CounselState) -> CounselState:
+        """Search all three memory tiers and build a context string."""
+        q = state["question"]
+        tenant = state.get("tenant_id", "default")
+        parts: list[str] = []
+
+        facts = memory_store.semantic_search(q, top_k=3, tenant_id=tenant)
+        if facts:
+            parts.append("--- Known facts ---")
+            for f in facts:
+                parts.append(f"- {f.text}")
+
+        episodes = memory_store.episodic_search(q, top_k=2, tenant_id=tenant)
+        if episodes:
+            parts.append("--- Related past conversations ---")
+            for e in episodes:
+                parts.append(f"- {e.summary}")
+
+        skills = memory_store.procedural_search(q, top_k=2, tenant_id=tenant)
+        if skills:
+            parts.append("--- Relevant learned strategies ---")
+            for s in skills:
+                parts.append(f"- [{s.name}] {s.fragment}")
+
+        return {"memory_context": "\n".join(parts) if parts else ""}
+
+    def save_memory(state: CounselState) -> CounselState:
+        """Reflect on the completed answer and persist memories."""
+        ans = state.get("answer")
+        if ans is None or ans.refused:
+            return {}
+        tenant = state.get("tenant_id", "default")
+        thread_id = state.get("thread_id", "default")
+        reflection = llm.reflect(state["question"], ans.text, thread_id)
+        for fact in reflection.semantic_facts:
+            memory_store.semantic_write(fact, thread_id=thread_id, tenant_id=tenant)
+        if reflection.episodic_summary:
+            memory_store.episodic_upsert(
+                reflection.episodic_summary, thread_id=thread_id, tenant_id=tenant,
+            )
+        for skill in reflection.skills:
+            memory_store.procedural_save(skill, tenant_id=tenant)
+        return {}
+
+    result: dict = {
         "plan": plan, "retrieve": retrieve, "validate": validate,
         "gap_analyze": gap_analyze, "synthesize": synthesize, "verify": verify,
         "human_gate": human_gate, "finalize": finalize,
     }
+    if memory_store is not None:
+        result["load_memory"] = load_memory
+        result["save_memory"] = save_memory
+    return result
 
 
 # --- routers ----------------------------------------------------------------

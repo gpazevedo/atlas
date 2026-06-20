@@ -24,7 +24,8 @@ from ..agent.llm import LLMProvider, TemplateLLM
 from ..chunking import chunk_corpus
 from ..corpus import build_corpus
 from ..decompose import HeuristicDecomposer, QueryDecomposer
-from ..embeddings import HashingEmbedder
+from ..embeddings import EmbeddingProvider, HashingEmbedder
+from ..memory.store import MemoryStore, SqliteMemoryStore
 from ..retrieval import InMemoryHybridRetriever, Retriever
 from ..telemetry import get_tracer
 
@@ -41,6 +42,7 @@ class Tenant:
     tenant_id: str
     checkpointer: SqliteSaver
     compiled_graph: object  # CompiledStateGraph
+    memory_store: MemoryStore | None = None
 
 
 class TenantRegistry:
@@ -54,6 +56,7 @@ class TenantRegistry:
         decomposer: QueryDecomposer | None = None,
         checkpoint_dir: str | None = None,
         hitl_enabled: bool = True,
+        embedder: EmbeddingProvider | None = None,
     ) -> None:
         self._retriever = retriever
         self._llm = llm or TemplateLLM()
@@ -62,6 +65,7 @@ class TenantRegistry:
             "CHECKPOINT_DIR", _DEFAULT_CHECKPOINT_DIR
         )
         self._hitl_enabled = hitl_enabled
+        self._embedder = embedder or HashingEmbedder()
         self._tenants: dict[str, Tenant] = {}
         self._lock = threading.Lock()
 
@@ -81,7 +85,10 @@ class TenantRegistry:
                 sample = next(iter(self._tenants.values()))
             try:
                 cfg = {"configurable": {"thread_id": "health-check"}}
-                sample.compiled_graph.invoke({"question": "health check"}, cfg)
+                sample.compiled_graph.invoke(
+                    {"question": "health check", "tenant_id": "health-check",
+                     "thread_id": "health-check"}, cfg,
+                )
                 result["graph"] = "ok"
             except Exception as exc:
                 result["graph"] = str(exc)
@@ -109,12 +116,17 @@ class TenantRegistry:
             conn = sqlite3.connect(db_path, check_same_thread=False)
             checkpointer = SqliteSaver(conn)
             retriever = self._retriever or _default_retriever()
+            memory_path = os.path.join(tenant_dir, "memory.db")
+            memory_store = SqliteMemoryStore(memory_path, self._embedder)
             graph = build_counsel_graph(
                 retriever, llm=self._llm, decomposer=self._decomposer,
                 checkpointer=checkpointer, hitl_enabled=self._hitl_enabled,
+                memory_store=memory_store,
             )
-            logger.info("tenant %s: created (db=%s)", tenant_id, db_path)
-            return Tenant(tenant_id=tenant_id, checkpointer=checkpointer, compiled_graph=graph)
+            logger.info("tenant %s: created (db=%s, memory=%s)",
+                        tenant_id, db_path, memory_path)
+            return Tenant(tenant_id=tenant_id, checkpointer=checkpointer,
+                          compiled_graph=graph, memory_store=memory_store)
 
     @staticmethod
     def _validate(tenant_id: str) -> None:

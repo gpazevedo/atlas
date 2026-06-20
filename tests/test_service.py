@@ -94,8 +94,8 @@ def test_ws_streams_nodes_then_result(client):
             else:
                 terminal = f
                 break
-    # plan->retrieve->validate->synthesize->verify->finalize all stream
-    assert nodes[0] == "plan"
+    # With memory: load_memory->plan->retrieve->validate->synthesize->verify->finalize
+    assert nodes[0] in ("plan", "load_memory")
     assert "finalize" in nodes
     assert terminal["event"] == "result"
     assert terminal["status"] == "answered"
